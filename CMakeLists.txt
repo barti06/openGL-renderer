@@ -1,0 +1,60 @@
+cmake_minimum_required(VERSION 4.0)
+project(openGL VERSION 0.01 LANGUAGES C)
+
+#my source files
+set(SOURCES 
+    src/main.c
+    src/shader.c
+    src/window.c
+    src/engine.c
+    src/camera.c
+)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# send the openGL bins to ./bin
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin)
+
+add_executable(${PROJECT_NAME} ${SOURCES})
+
+# compiler settings
+target_compile_features(${PROJECT_NAME} PRIVATE c_std_99)
+
+# my header files
+target_include_directories(${PROJECT_NAME} 
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+# include glfw 
+add_subdirectory(lib/glfw)
+
+# include cglm and dont build its docs or tests
+set(CGLM_STATIC ON CACHE INTERNAL "") 
+add_subdirectory(lib/cglm)
+
+# include glad
+add_library(glad STATIC lib/glad/src/glad.c)
+target_include_directories(glad PUBLIC lib/glad/include)
+
+# include log.c
+add_library(log.c STATIC lib/log.c/src/log.c)
+target_include_directories(log.c PUBLIC lib/log.c/src)
+
+# setup libraries
+target_link_libraries(${PROJECT_NAME}
+    PRIVATE
+    glfw
+    glad
+    cglm
+    log.c
+    ${CMAKE_DL_LIBS}
+)
+
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/shaders"
+        "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders"
+    )
+
+include (CTest)
+enable_testing()
