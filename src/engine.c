@@ -133,10 +133,6 @@ void engine_loop(Engine* engine)
     {
         engine_updates(engine);
 
-        log_info("Position: %f, %f, %f", engine->camera.position[0], engine->camera.position[1], engine->camera.position[2]);
-        log_info("Front: %f, %f, %f", engine->camera.front[0], engine->camera.front[1], engine->camera.front[2]);
-        log_info("FPS: %f", 1 / engine->delta_time);
-
         engine_draw(engine);
 
         window_update(&engine->window);
