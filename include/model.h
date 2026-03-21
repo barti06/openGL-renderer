@@ -1,32 +1,19 @@
 #ifndef MODEL_H
 #define MODEL_H
 
-#include "cgltf.h"
-#include "stb_image.h"
-
-#include <glad/glad.h>
+#include <primitive.h>
 #include <shader.h>
-
-#define MAX_MODEL_PATH_LENGTH 512
 
 typedef struct Model
 {
+    // store the gltf model meshes
+    Primitive* primitives;
+    uint32_t primitive_count;
+
     // store path of the loaded model
     char filepath[MAX_MODEL_PATH_LENGTH];
     // simple loading flag
     int is_loaded;
-
-    // openGL handles
-    GLuint VAO;
-    GLuint VBO_positions;
-    GLuint VBO_uvs;
-    GLuint VBO_normals;
-    GLuint EBO;
-    GLuint albedo;
-
-    // num of instances to draw
-    GLsizei index_count;
-    GLenum  index_type;
 } Model;
 
 // stores a model in the first parameter, given 

@@ -13,6 +13,7 @@ set(SOURCES
     src/camera.c
     src/implementations.c
     src/model.c
+    src/primitive.c
 )
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

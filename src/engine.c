@@ -120,7 +120,8 @@ void engine_draw(Engine* engine)
         for(int index = 0; index < engine->loaded; index++)
         {
             glm_mat4_identity(modelMat[index]);
-            glm_translate(modelMat[index], (vec3){(float)index + 1.0f, 0.0f, 0.0f});
+            glm_translate(modelMat[index], (vec3){(float)index * 50.0f, 0.0f, 0.0f});
+            glm_scale(modelMat[index], (vec3){0.1f, 0.1f, 0.1f});
             shader_set_mat4(&engine->shader, "model", modelMat[index]);
             model_draw(&engine->model, &engine->shader);
         }
@@ -136,7 +137,7 @@ void engine_draw(Engine* engine)
 void engine_loop(Engine* engine)
 {
     engine->loaded = 0;
-    model_load(&engine->model, "resources/DamagedHelmet.glb");
+    model_load(&engine->model, "resources/sponza/Sponza.gltf");
     while(!glfwWindowShouldClose(engine->window.ptr))
     {
         engine_updates(engine);
