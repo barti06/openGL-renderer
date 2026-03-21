@@ -8,6 +8,8 @@ set(SOURCES
     src/window.c
     src/engine.c
     src/camera.c
+    src/implementations.c
+    src/model.c
 )
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -40,6 +42,14 @@ target_include_directories(glad PUBLIC lib/glad/include)
 add_library(log.c STATIC lib/log.c/src/log.c)
 target_include_directories(log.c PUBLIC lib/log.c/src)
 
+# include cgltf
+add_library(cgltf INTERFACE)
+target_include_directories(cgltf INTERFACE lib/cgltf)
+
+# include stb image
+add_library(stb_image INTERFACE)
+target_include_directories(stb_image INTERFACE lib/stb)
+
 # setup libraries
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
@@ -47,6 +57,8 @@ target_link_libraries(${PROJECT_NAME}
     glad
     cglm
     log.c
+    cgltf
+    stb_image
     ${CMAKE_DL_LIBS}
 )
 

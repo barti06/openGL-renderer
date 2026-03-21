@@ -14,7 +14,7 @@ typedef struct Shader
 
 Shader init_shader(const char* vertex, const char* fragment);
 
-void use_shader(Shader* shader);
+void shader_use(Shader* shader);
 
 // uniform utility functions
 void shader_set_bool(Shader* shader, const char* name, bool value);

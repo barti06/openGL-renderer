@@ -1,5 +1,6 @@
 #include "camera.h"
 #include <engine.h>
+#include <model.h>
 
 void engine_init(Engine* engine)
 {
@@ -112,7 +113,7 @@ void engine_draw(Engine* engine)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glViewport(0, 0, engine->viewportSize.x, engine->viewportSize.y);
         
-        use_shader(&engine->shader);
+        shader_use(&engine->shader);
 
         // set model matrix
         mat4 model;
@@ -129,14 +130,20 @@ void engine_draw(Engine* engine)
 
 void engine_loop(Engine* engine)
 {
+    Model model;
+    model_load(&model, "resources/DamagedHelmet.glb");
     while(!glfwWindowShouldClose(engine->window.ptr))
     {
         engine_updates(engine);
-
+        
         engine_draw(engine);
+        
+        model_draw(&model, &engine->shader);
 
         window_update(&engine->window);
+
     }
+    model_free(&model);
 }
 
 void engine_cleanup(Engine* engine)
