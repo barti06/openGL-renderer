@@ -1,3 +1,6 @@
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
 cmake_minimum_required(VERSION 4.0)
 project(openGL VERSION 0.01 LANGUAGES C)
 
@@ -23,8 +26,11 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 target_compile_features(${PROJECT_NAME} PRIVATE 
     c_std_99)
 target_compile_options(${PROJECT_NAME} PRIVATE
-    $<$<CONFIG:Release>:-O3>)
-
+        $<$<CONFIG:Release>:-O3 -march=native -ffast-math -funroll-loops -fomit-frame-pointer>
+)
+set_property(TARGET ${PROJECT_NAME} PROPERTY
+    INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE
+)
 # my header files
 target_include_directories(${PROJECT_NAME} 
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
