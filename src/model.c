@@ -189,10 +189,12 @@ GLuint albedo_texture_load(cgltf_primitive *model_primitive, const char *base_pa
 
     // get the texture handle from the model primitive
     cgltf_texture_view* texture_view = &model_primitive->material->pbr_metallic_roughness.base_color_texture;
+
     if (!texture_view->texture || !texture_view->texture->image) 
     {
         log_error("ERROR... load_albedo_texture() SAYS: NO MATERIAL ON GIVEN PRIMITIVE");
         return 0;
+        
     }
 
     cgltf_image* image = texture_view->texture->image;

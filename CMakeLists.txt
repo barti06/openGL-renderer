@@ -20,7 +20,10 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin)
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 # compiler settings
-target_compile_features(${PROJECT_NAME} PRIVATE c_std_99)
+target_compile_features(${PROJECT_NAME} PRIVATE 
+    c_std_99)
+target_compile_options(${PROJECT_NAME} PRIVATE
+    $<$<CONFIG:Release>:-O3>)
 
 # my header files
 target_include_directories(${PROJECT_NAME} 

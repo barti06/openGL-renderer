@@ -1,6 +1,6 @@
-#include "camera.h"
+#include "cglm/mat4.h"
 #include <engine.h>
-#include <model.h>
+#include <stdbool.h>
 
 void engine_init(Engine* engine)
 {
@@ -116,9 +116,14 @@ void engine_draw(Engine* engine)
         shader_use(&engine->shader);
 
         // set model matrix
-        mat4 model;
-        glm_mat4_identity(model);
-        shader_set_mat4(&engine->shader, "model", model);
+        mat4 modelMat[16];
+        for(int index = 0; index < engine->loaded; index++)
+        {
+            glm_mat4_identity(modelMat[index]);
+            glm_translate(modelMat[index], (vec3){(float)index + 1.0f, 0.0f, 0.0f});
+            shader_set_mat4(&engine->shader, "model", modelMat[index]);
+            model_draw(&engine->model, &engine->shader);
+        }
 
         // send updated camera matrices to main shader
         shader_set_mat4(&engine->shader, "view", engine->camera.view);
@@ -130,20 +135,25 @@ void engine_draw(Engine* engine)
 
 void engine_loop(Engine* engine)
 {
-    Model model;
-    model_load(&model, "resources/DamagedHelmet.glb");
+    engine->loaded = 0;
+    model_load(&engine->model, "resources/DamagedHelmet.glb");
     while(!glfwWindowShouldClose(engine->window.ptr))
     {
         engine_updates(engine);
         
         engine_draw(engine);
         
-        model_draw(&model, &engine->shader);
+        log_info("FPS: %lf", 1.0 / engine->delta_time);
+
+        if(is_key_pressed(&engine->window, GLFW_KEY_F))
+        {
+            engine->loaded++;
+        }
 
         window_update(&engine->window);
 
     }
-    model_free(&model);
+    model_free(&engine->model);
 }
 
 void engine_cleanup(Engine* engine)

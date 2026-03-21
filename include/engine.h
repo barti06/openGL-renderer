@@ -2,6 +2,7 @@
 #define ENGINE_H
 
 #include <shader.h>
+#include <model.h>
 #include <window.h>
 #include <camera.h>
 #include <utils.h>
@@ -21,7 +22,10 @@ typedef struct Engine
     float nearZ;
     float farZ; 
     bool canMove;
+    int loaded;
     
+    Model model;
+
     uint32_t VAO, VBO;
 } Engine;
 
