@@ -68,11 +68,11 @@ Shader init_shader(const char* vertexPath, const char* fragmentPath)
     glLinkProgram(shader.ID);
     // check if shader program linked successfully
     int32_t successProgram;
-    glGetProgramiv(shader.ID, GL_COMPILE_STATUS, &successProgram);
+    glGetProgramiv(shader.ID, GL_LINK_STATUS, &successProgram);
     if (!successProgram)
     {
         char infoLogProgram[512];
-        glGetShaderInfoLog(shader.ID, 512, NULL, infoLogProgram);
+        glGetProgramInfoLog(shader.ID, 512, NULL, infoLogProgram);
         FILE* fptr = fopen("shaderLog.txt", "a");
         if (fptr != NULL)
         {
@@ -81,6 +81,7 @@ Shader init_shader(const char* vertexPath, const char* fragmentPath)
         }
         log_error("Shader shader_init ERROR: SHADER PROGRAM LINKING FAILED. SEE LOG FOR MORE INFO.");
     }
+    
     // delete the shaders as they're linked into our program now and no longer necessary
     glDeleteShader(vertex);
     glDeleteShader(fragment);
