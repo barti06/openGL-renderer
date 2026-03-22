@@ -14,18 +14,25 @@ int primitive_load(Primitive* model_primitive, cgltf_primitive *src, const char 
     glGenBuffers(1, &model_primitive->VBO_uvs);
     glGenBuffers(1, &model_primitive->EBO);
  
+    // flag to check correct gpu data upload
     int ok = 1;
  
-    for (size_t ai = 0; ai < src->attributes_count; ai++)
+    // upload data to gpu
+    for (uint64_t attribute_index = 0; attribute_index < src->attributes_count; attribute_index++)
     {
-        cgltf_attribute *attr = &src->attributes[ai];
- 
-        if (attr->type == cgltf_attribute_type_position)
-            ok &= upload_accessor_float(attr->data, model_primitive->VBO_positions, 0, 3);
-        else if (attr->type == cgltf_attribute_type_normal)
-            ok &= upload_accessor_float(attr->data, model_primitive->VBO_normals,   1, 3);
-        else if (attr->type == cgltf_attribute_type_texcoord && attr->index == 0)
-            ok &= upload_accessor_float(attr->data, model_primitive->VBO_uvs,       2, 2);
+        cgltf_attribute* attribute = &src->attributes[attribute_index];
+        
+        // pass primitive positions to gpu
+        if(attribute->type == cgltf_attribute_type_position)
+            ok &= upload_accessor_float(attribute->data, model_primitive->VBO_positions, 0, 3);
+        // pass primitive normals to gpu
+        else if(attribute->type == cgltf_attribute_type_normal)
+            ok &= upload_accessor_float(attribute->data, model_primitive->VBO_normals, 1, 3);
+        // pass primitive uvs to gpu
+        else if(attribute->type == cgltf_attribute_type_texcoord && attribute->index == 0)
+            ok &= upload_accessor_float(attribute->data, model_primitive->VBO_uvs, 2, 2);
+        else if(attribute->type == cgltf_attribute_type_tangent)
+            ok &= upload_accessor_float(attribute->data, model_primitive->VBO_tangents, 3, 4);
     }
  
     if (src->indices)
@@ -39,7 +46,22 @@ int primitive_load(Primitive* model_primitive, cgltf_primitive *src, const char 
     if (!ok) 
         return 0;
  
-    model_primitive->albedo = albedo_texture_load(src, base_path);
+    if (!src->material) 
+    {
+        log_error("ERROR... primitive_load() SAYS: PRIMITIVE CONTAINS NO MATERIAL");
+        return 0;
+    }
+
+    if(src->material->has_pbr_metallic_roughness)
+    {
+        model_primitive->albedo = albedo_texture_load(src, base_path);
+        model_primitive->metallic_roughness = metallic_roughness_texture_load(src, base_path);
+        // wont add support for albedo factor! :D
+        model_primitive->metallic_factor = src->material->pbr_metallic_roughness.metallic_factor;
+        model_primitive->roughness_factor = src->material->pbr_metallic_roughness.roughness_factor;
+    }
+    model_primitive->normal = normal_texture_load(src, base_path);
+
     return 1;
 }
  
@@ -99,12 +121,12 @@ int upload_accessor_index(cgltf_accessor *accessor, GLuint EBO, GLsizei *out_cou
         return 0;
     }
 
-    uint32_t *indices = (uint32_t*)malloc(accessor->count * sizeof(uint32_t));
-    if (!indices) 
+    uint32_t* indices = (uint32_t*)malloc(accessor->count * sizeof(uint32_t));
+    if(!indices) 
         return 0;
 
-    for (size_t i = 0; i < accessor->count; i++) 
-        cgltf_accessor_read_uint(accessor, i, &indices[i], 1);
+    for(size_t accessor_index = 0; accessor_index < accessor->count; accessor_index++) 
+        cgltf_accessor_read_uint(accessor, accessor_index, &indices[accessor_index], 1);
 
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
@@ -120,40 +142,24 @@ int upload_accessor_index(cgltf_accessor *accessor, GLuint EBO, GLsizei *out_cou
 
 /*----START TEXTURES DEFINITIONS----*/
 
-GLuint albedo_texture_load(cgltf_primitive *model_primitive, const char *base_path)
+static GLuint texture_loader(cgltf_texture_view* texture_view, const char* base_path)
 {
-    if (!model_primitive->material) 
-    {
-        log_error("ERROR... load_albedo_texture() SAYS: PRIMITIVE CONTAINS NO MATERIAL");
-        return 0;
-    }
-
-    // get the texture handle from the model primitive
-    cgltf_texture_view* texture_view = &model_primitive->material->pbr_metallic_roughness.base_color_texture;
-
-    if (!texture_view->texture || !texture_view->texture->image) 
-    {
-        log_error("ERROR... load_albedo_texture() SAYS: NO MATERIAL ON GIVEN PRIMITIVE");
-        return 0;
-        
-    }
-
     cgltf_image* image = texture_view->texture->image;
 
     int width, height, channels;
     unsigned char *pixels = NULL;
     if (image->buffer_view) 
     {
-        // unpack image embedded into .glb
+        // unpack texture embedded into .glb
         uint8_t* data = (uint8_t*)image->buffer_view->buffer->data + image->buffer_view->offset;
-        pixels = stbi_load_from_memory(data, (int)image->buffer_view->size, &width, &height, &channels, 4);
+        pixels = stbi_load_from_memory(data, (int)image->buffer_view->size, &width, &height, &channels, 0);
     } 
     else if (image->uri) 
     {
-        // unpack image from an external folder
+        // get texture from an external folder
         char full_path[MAX_MODEL_PATH_LENGTH * 2];
         snprintf(full_path, sizeof(full_path), "%s%s", base_path, image->uri);
-        pixels = stbi_load(full_path, &width, &height, &channels, 4);
+        pixels = stbi_load(full_path, &width, &height, &channels, 0);
     }
 
     if (!pixels) 
@@ -162,12 +168,44 @@ GLuint albedo_texture_load(cgltf_primitive *model_primitive, const char *base_pa
         return 0;
     }
 
+    GLenum internal_format, external_format;
+    int alignment;
+
+    switch (channels) 
+    {
+    case 1:
+        internal_format = GL_R8;
+        external_format = GL_RED;
+        alignment = 1;
+        break;
+    case 2:
+        internal_format = GL_RG8;
+        external_format = GL_RG;
+        alignment = 2;
+        break;
+    case 3:
+        internal_format = GL_RGB8;
+        external_format = GL_RGB;
+        alignment = 1;
+        break;
+    case 4:
+        internal_format = GL_RGBA8;
+        external_format = GL_RGBA;
+        alignment = 4;
+        break;
+    default:
+        log_error("ERROR... albedo_texture_load() SAYS: UNEXPECTED ALBEDO TEXTURE CHANNEL COUNT = %d!", channels);
+        stbi_image_free(pixels);
+        return 0;
+    }
+
     GLuint tex;
     glGenTextures(1, &tex);
     glBindTexture(GL_TEXTURE_2D, tex);
 
-    // MUST send RGBA8 because it's stbi image was forced to 4 channels
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    // modify alignment, just in case a texture has a different format than GL_RGBA
+    glPixelStorei(GL_UNPACK_ALIGNMENT, alignment);
+    glTexImage2D(GL_TEXTURE_2D, 0, internal_format, width, height, 0, external_format, GL_UNSIGNED_BYTE, pixels);
     glGenerateMipmap(GL_TEXTURE_2D);
 
     // use gltf texture sampling options, otherwise resort to defaults
@@ -182,6 +220,51 @@ GLuint albedo_texture_load(cgltf_primitive *model_primitive, const char *base_pa
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     wrap_s);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     wrap_t);
 
+    // setup anisotropic filtering
+    GLfloat max_anisotropic;
+    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &max_anisotropic);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, max_anisotropic);
+
     stbi_image_free(pixels);
     return tex;
+}
+
+GLuint albedo_texture_load(cgltf_primitive* primitive, const char* base_path)
+{
+    // get albedo texture handle from the model primitive
+    cgltf_texture_view* texture_view = &primitive->material->pbr_metallic_roughness.base_color_texture;
+
+    if (!texture_view->texture || !texture_view->texture->image) 
+    {
+        log_error("ERROR... albedo_texture_load() SAYS: NO ALBEDO TEXTURE ON GIVEN PRIMITIVE");
+        return 0;
+    }
+
+    return texture_loader(texture_view, base_path);
+}
+
+GLuint metallic_roughness_texture_load(cgltf_primitive* primitive, const char* base_path)
+{
+    // get albedo texture handle from the model primitive
+    cgltf_texture_view* texture_view = &primitive->material->pbr_metallic_roughness.metallic_roughness_texture;
+    if (!texture_view->texture || !texture_view->texture->image) 
+    {
+        log_error("ERROR... metallic_roughness_texture_load() SAYS: NO METALLIC ROUGHNESS TEXTURE ON GIVEN PRIMITIVE");
+        return 0;
+    }
+
+    return texture_loader(texture_view, base_path);
+}
+
+GLuint normal_texture_load(cgltf_primitive* primitive, const char* base_path)
+{
+    // get albedo texture handle from the model primitive
+    cgltf_texture_view* texture_view = &primitive->material->normal_texture;
+    if (!texture_view->texture || !texture_view->texture->image) 
+    {
+        log_error("ERROR... normal_texture_load() SAYS: NO NORMAL TEXTURE ON GIVEN PRIMITIVE");
+        return 0;
+    }
+
+    return texture_loader(texture_view, base_path);
 }

@@ -16,8 +16,7 @@ int model_load(Model* model, const char* location)
 
     cgltf_options model_options = {0};
     cgltf_data* model_data = NULL;
-
-    // parse the file 
+    // parse model file 
     cgltf_result result = cgltf_parse_file(&model_options, location, &model_data);
     if(result != cgltf_result_success)
     {
@@ -35,7 +34,7 @@ int model_load(Model* model, const char* location)
 
     if(model_data->meshes_count == 0)
     {
-        log_error("ERROR... void model_load(Model* model, const char* location) SAYS: NO MESHES IN FILE.");
+        log_error("ERROR... model_load() SAYS: NO MESHES IN FILE.");
         cgltf_free(model_data);
         return 0;
     }
@@ -84,7 +83,7 @@ int model_load(Model* model, const char* location)
         return 0;
     }
 
-    // load each primitive into the model
+    // load each primitive from the data into the model
     for (size_t mi = 0; mi < model_data->meshes_count; mi++)
     {
         cgltf_mesh* mesh = &model_data->meshes[mi];
@@ -150,6 +149,21 @@ void model_draw(const Model* model, Shader* shader)
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, current_primitive->albedo);
             shader_set_int(shader, "u_albedo", 0);
+            //shader_set_vec4(shader, "u_albedo_factor", current_primitive->albedo_factor);
+        }
+        if(current_primitive->metallic_roughness)
+        {
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, current_primitive->metallic_roughness);
+            shader_set_int(shader, "u_metallic_roughness", 1);
+            shader_set_float(shader, "u_metallic_factor", current_primitive->metallic_factor);
+            shader_set_float(shader, "u_roughness_factor", current_primitive->roughness_factor);
+        }
+        if(current_primitive->normal)
+        {
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, current_primitive->normal);
+            shader_set_int(shader, "u_normal", 2);
         }
  
         glBindVertexArray(current_primitive->VAO);

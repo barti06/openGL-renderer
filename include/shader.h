@@ -12,7 +12,9 @@ typedef struct Shader
     uint32_t ID;
 } Shader;
 
-Shader init_shader(const char* vertex, const char* fragment);
+void shader_init(Shader* shader, const char* vertexPath, const char* fragmentPath);
+
+void shader_reload_frag(Shader* shader);
 
 void shader_use(Shader* shader);
 

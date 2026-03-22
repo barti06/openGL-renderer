@@ -19,6 +19,8 @@ typedef struct Engine
     float delta_time;
     float current_time;
 
+    bool swap_interv;
+
     float nearZ;
     float farZ; 
     bool canMove;

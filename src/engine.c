@@ -1,6 +1,4 @@
-#include "cglm/mat4.h"
 #include <engine.h>
-#include <stdbool.h>
 
 void engine_init(Engine* engine)
 {
@@ -14,26 +12,12 @@ void engine_init(Engine* engine)
     glViewport(0, 0, 1600, 900);
 	glEnable(GL_DEPTH_TEST);
 
-    float vertices[] = 
-    {
-	    -0.5f, -0.5f, 0.0f,
-	     0.5f, -0.5f, 0.0f,
-	     0.0f,  0.5f, 0.0f
-	};
+    glEnable(GL_CULL_FACE);
+    glfwSwapInterval(1);
+    engine->swap_interv = true;
 
     // init shader
-	engine->shader = init_shader("shaders/vertex.vert", "shaders/fragment.frag");
-
-	// generate vertex objects
-	glGenVertexArrays(1, &engine->VAO);
-	glGenBuffers(1, &engine->VBO);
-	// bind the vertex array then the vertex buffer
-	glBindVertexArray(engine->VAO);
-	glBindBuffer(GL_ARRAY_BUFFER, engine->VBO);
-	// send the vertex data
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
+	shader_init(&engine->shader, "shaders/vertex.vert", "shaders/fragment.frag");
 
     engine->camera = camera_init();
     engine->last_time = 0.0f; // init delta timing
@@ -73,6 +57,13 @@ void engine_handleInput(Engine* engine)
         glfwSetWindowShouldClose(engine->window.ptr, true);
     if(is_key_pressed(&engine->window, GLFW_KEY_ESCAPE))
         engine->canMove = !engine->canMove;
+    if(is_key_pressed(&engine->window, GLFW_KEY_F5))
+        shader_reload_frag(&engine->shader);
+    if(is_key_pressed(&engine->window, GLFW_KEY_J))
+    {
+        engine->swap_interv = !engine->swap_interv;
+        glfwSwapInterval(engine->swap_interv);
+    }
 } 
 
 void engine_updates(Engine* engine)
@@ -122,22 +113,22 @@ void engine_draw(Engine* engine)
             glm_mat4_identity(modelMat[index]);
             glm_translate(modelMat[index], (vec3){(float)index * 50.0f, 0.0f, 0.0f});
             glm_scale(modelMat[index], (vec3){0.1f, 0.1f, 0.1f});
-            shader_set_mat4(&engine->shader, "model", modelMat[index]);
+            shader_set_mat4(&engine->shader, "u_model", modelMat[index]);
             model_draw(&engine->model, &engine->shader);
         }
 
         // send updated camera matrices to main shader
-        shader_set_mat4(&engine->shader, "view", engine->camera.view);
-        shader_set_mat4(&engine->shader, "projection", engine->camera.projection);
+        shader_set_mat4(&engine->shader, "u_view", engine->camera.view);
+        shader_set_mat4(&engine->shader, "u_projection", engine->camera.projection);
+        shader_set_vec3(&engine->shader, "u_camera_position", engine->camera.position);
 
-        glBindVertexArray(engine->VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
 void engine_loop(Engine* engine)
 {
     engine->loaded = 0;
     model_load(&engine->model, "resources/sponza/Sponza.gltf");
+    
     while(!glfwWindowShouldClose(engine->window.ptr))
     {
         engine_updates(engine);

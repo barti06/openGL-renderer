@@ -1,0 +1,12 @@
+{
+    "triggerTaskOnSave.tasks": {
+        "watch shaders": [
+            "shaders/*.glsl",
+            "shaders/*.vert",
+            "shaders/*.frag"
+        ]
+    },
+    "clangd.arguments": [
+        "--header-insertion=never"
+    ]
+}

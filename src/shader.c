@@ -1,6 +1,6 @@
 #include <shader.h>
 
-Shader init_shader(const char* vertexPath, const char* fragmentPath)
+void shader_init(Shader* shader, const char* vertexPath, const char* fragmentPath)
 {
     // try loading the shader code into this function
     if(vertexPath == NULL || fragmentPath == NULL)
@@ -13,9 +13,8 @@ Shader init_shader(const char* vertexPath, const char* fragmentPath)
         log_error("\nShader init_shader ERROR: COULDN'T READ SHADER CODE!");
 
     // set the shader to send
-    Shader shader;
-    shader.frag_path = fragmentPath;
-    shader.vert_path = vertexPath;
+    shader->frag_path = fragmentPath;
+    shader->vert_path = vertexPath;
 
     // the actual openGL shaders
     uint32_t vertex, fragment;
@@ -23,6 +22,8 @@ Shader init_shader(const char* vertexPath, const char* fragmentPath)
     vertex = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vertex, 1, &vertexCode, NULL);
     glCompileShader(vertex);
+    // delete vertex shader code from memory, as it's now fully loaded
+    free((void*)vertexCode);
     // checks if vertex shader was compiled successfully
     int32_t successVert;
     glGetShaderiv(vertex, GL_COMPILE_STATUS, &successVert);
@@ -37,13 +38,17 @@ Shader init_shader(const char* vertexPath, const char* fragmentPath)
             fprintf(fptr, "\n%s", infoLogVert);
             fclose(fptr);
         }
+        glDeleteShader(vertex);
         log_error("\nShader shader_init ERROR: VERTEX SHADER COMPILATION FAILED. SEE LOG FOR MORE INFO.");
+        return;
     }
 
     // creates a fragment Shader
     fragment = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(fragment, 1, &fragmentCode, NULL);
     glCompileShader(fragment);
+    // delete fragment shader code from memory, as it's now fully loaded
+    free((void*)fragmentCode);
     // checks if fragment shader was compiled sucessfully
     int32_t successFrag;
     glGetShaderiv(fragment, GL_COMPILE_STATUS, &successFrag);
@@ -57,22 +62,24 @@ Shader init_shader(const char* vertexPath, const char* fragmentPath)
             fprintf(fptr, "\n%s", infoLogFrag);
             fclose(fptr);
         }
+        glDeleteShader(fragment);
         log_error("Shader shader_init ERROR: FRAGMENT SHADER COMPILATION FAILED. SEE LOG FOR MORE INFO.");
+        return;
     }
     // create a shader program and attach the vertex and fragment shaders
-    shader.ID = glCreateProgram();
-    glAttachShader(shader.ID, vertex);
-    glAttachShader(shader.ID, fragment);
+    shader->ID = glCreateProgram();
+    glAttachShader(shader->ID, vertex);
+    glAttachShader(shader->ID, fragment);
 
     // link the program
-    glLinkProgram(shader.ID);
+    glLinkProgram(shader->ID);
     // check if shader program linked successfully
     int32_t successProgram;
-    glGetProgramiv(shader.ID, GL_LINK_STATUS, &successProgram);
+    glGetProgramiv(shader->ID, GL_LINK_STATUS, &successProgram);
     if (!successProgram)
     {
         char infoLogProgram[512];
-        glGetProgramInfoLog(shader.ID, 512, NULL, infoLogProgram);
+        glGetProgramInfoLog(shader->ID, 512, NULL, infoLogProgram);
         FILE* fptr = fopen("shaderLog.txt", "a");
         if (fptr != NULL)
         {
@@ -86,7 +93,83 @@ Shader init_shader(const char* vertexPath, const char* fragmentPath)
     glDeleteShader(vertex);
     glDeleteShader(fragment);
 
-    return shader;
+    return;
+}
+
+void shader_reload_frag(Shader* shader)
+{
+    // try loading the shader code into this function
+    if(shader->frag_path == NULL)
+        log_error("\nShader shader_reload_frag() ERROR: INVALID SHADER PATHS!");
+
+    const char* fragmentCode = read_file(shader->frag_path);
+    if(fragmentCode == NULL)
+        log_error("\nShader shader_reload_frag() ERROR: COULDN'T READ SHADER CODE!");
+
+    // the actual openGL shaders
+    uint32_t fragment;
+    // creates a fragment Shader
+    fragment = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragment, 1, &fragmentCode, NULL);
+    glCompileShader(fragment);
+    // delete shader code from memory, as it's now fully loaded
+    free((void*)fragmentCode);
+    // checks if fragment shader was compiled sucessfully
+    int32_t successFrag;
+    glGetShaderiv(fragment, GL_COMPILE_STATUS, &successFrag);
+    if (!successFrag)
+    {
+        char infoLogFrag[512];
+        glGetShaderInfoLog(fragment, 512, NULL, infoLogFrag);
+        FILE* fptr = fopen("shaderLog.txt", "a");
+        if (fptr != NULL)
+        {
+            fprintf(fptr, "\n%s", infoLogFrag);
+            fclose(fptr);
+        }
+        // delete broken shader
+        glDeleteShader(fragment);
+        log_error("Shader shader_init ERROR: FRAGMENT SHADER COMPILATION FAILED. SEE LOG FOR MORE INFO.");
+        return;
+    }
+
+    // deattach and delete the old fragment shader
+    GLint attachedCount;
+    GLuint attached[4] = { 0 };
+    glGetAttachedShaders(shader->ID, 4, &attachedCount, attached);
+    for (int i = 0; i < attachedCount; i++) 
+    {
+        GLint type;
+        glGetShaderiv(attached[i], GL_SHADER_TYPE, &type);
+        if(type == GL_FRAGMENT_SHADER)
+        {
+            glDetachShader(shader->ID, attached[i]);
+            glDeleteShader(attached[i]);
+        }
+    }
+
+    // create a shader program and attach the vertex and fragment shaders
+    glAttachShader(shader->ID, fragment);
+
+    glLinkProgram(shader->ID);
+    // check if shader program linked successfully
+    int32_t successProgram;
+    glGetProgramiv(shader->ID, GL_LINK_STATUS, &successProgram);
+    if (!successProgram)
+    {
+        char infoLogProgram[512];
+        glGetProgramInfoLog(shader->ID, 512, NULL, infoLogProgram);
+        FILE* fptr = fopen("shaderLog.txt", "a");
+        if (fptr != NULL)
+        {
+            fprintf(fptr, "\n%s", infoLogProgram);
+            fclose(fptr);
+        }
+        log_error("Shader shader_init ERROR: SHADER PROGRAM LINKING FAILED. SEE LOG FOR MORE INFO.");
+    }
+    
+    // delete the shader as it's linked into the program now and no longer necessary
+    glDeleteShader(fragment);
 }
 
 void shader_use(Shader* shader)

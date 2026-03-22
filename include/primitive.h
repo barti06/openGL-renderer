@@ -1,6 +1,7 @@
 #ifndef PRIMITIVE_H
 #define PRIMITIVE_H
 
+#include "cglm/types.h"
 #include "cgltf.h"
 #include "stb_image.h"
 
@@ -15,8 +16,18 @@ typedef struct Primitive
     GLuint VBO_positions;
     GLuint VBO_uvs;
     GLuint VBO_normals;
+    GLuint VBO_tangents;
     GLuint EBO;
+
+    // textures
     GLuint albedo;
+    GLuint metallic_roughness;
+    GLuint normal;
+
+    // textures factors
+    vec4 albedo_factor;
+    float metallic_factor;
+    float roughness_factor;
 
     // num of instances to draw
     GLsizei index_count;
@@ -32,5 +43,10 @@ int primitive_load(Primitive* model_primitive, cgltf_primitive* src, const char*
 void primitive_free(Primitive* model_primitive);
 
 GLuint albedo_texture_load(cgltf_primitive* primitive, const char* base_path);
+
+GLuint metallic_roughness_texture_load(cgltf_primitive* primitive, const char* base_path);
+
+GLuint normal_texture_load(cgltf_primitive* primitive, const char* base_path);
+
 
 #endif
