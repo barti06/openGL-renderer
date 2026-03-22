@@ -1,6 +1,6 @@
-# C99 openGL renderer
+# Basic openGL renderer
 
-Basic OpenGL renderer written using C99 and the following dependencies:
+Basic OpenGL renderer written in C and using the following dependencies:
 
 - [cglm](https://github.com/recp/cglm)
 - [cgltf](https://github.com/jkuhlmann/cgltf)
