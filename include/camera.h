@@ -11,9 +11,16 @@ typedef enum InputType {
     RIGHT,
     UP,
     DOWN,
-    SPRINT,
     MAX_MOVEMENT
 } InputType;
+
+typedef enum ActionType
+{
+    WALK,
+    SPRINT,
+    CROUCH,
+    MAX_ACTION
+} ActionType;
 
 typedef struct Camera
 {
@@ -41,7 +48,7 @@ void camera_update_vectors(Camera* camera);
 
 Camera camera_init(void);
 
-void camera_process_movement(Camera* camera, float delta_time, InputType input_type);
+void camera_process_movement(Camera* camera, float delta_time, InputType input_type, ActionType action_type);
 
 void camera_process_rotation(Camera* camera, float xoffset, float yoffset);
 

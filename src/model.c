@@ -1,3 +1,5 @@
+#include "log.h"
+#include "primitive.h"
 #include <model.h>
 #include <string.h>
 #include <stdlib.h>
@@ -149,7 +151,7 @@ void model_draw(const Model* model, Shader* shader)
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, current_primitive->albedo);
             shader_set_int(shader, "u_albedo", 0);
-            //shader_set_vec4(shader, "u_albedo_factor", current_primitive->albedo_factor);
+            shader_set_vec4(shader, "u_albedo_factor", current_primitive->albedo_factor);
         }
         if(current_primitive->metallic_roughness)
         {
@@ -164,6 +166,20 @@ void model_draw(const Model* model, Shader* shader)
             glActiveTexture(GL_TEXTURE2);
             glBindTexture(GL_TEXTURE_2D, current_primitive->normal);
             shader_set_int(shader, "u_normal", 2);
+        }
+        if(current_primitive->emissive)
+        {
+            glActiveTexture(GL_TEXTURE3);
+            glBindTexture(GL_TEXTURE_2D, current_primitive->emissive);
+            shader_set_int(shader, "u_emissive", 3);
+            shader_set_float(shader, "u_emissive_strength", current_primitive->emissive_strength);
+            shader_set_vec3(shader, "u_emissive_factor", current_primitive->emissive_factor);
+        }
+        if(current_primitive->ambient_occlusion)
+        {
+            glActiveTexture(GL_TEXTURE4);
+            glBindTexture(GL_TEXTURE_2D, current_primitive->ambient_occlusion);
+            shader_set_int(shader, "u_ao", 4);
         }
  
         glBindVertexArray(current_primitive->VAO);

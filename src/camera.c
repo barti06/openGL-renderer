@@ -58,11 +58,13 @@ Camera camera_init(void)
     return camera;
 }
 
-void camera_process_movement(Camera* camera, float delta_time, InputType input_type)
+void camera_process_movement(Camera* camera, float delta_time, InputType input_type, ActionType action_type)
 {
     float speed = camera->movementSpeed * delta_time;
-    if(input_type == SPRINT)
+    if(action_type == SPRINT)
         speed *= 2.0f;
+    if(action_type == CROUCH)
+        speed *= 0.5f;
 
     switch(input_type)
     {
@@ -117,7 +119,7 @@ void camera_process_rotation(Camera* camera, float xoffset, float yoffset)
     camera->yaw += xoffset;
     camera->pitch += yoffset;
 
-    // make sure that when pitch is out of bounds, screen doesn't get flipped
+    // make sure that when pitch is out of bounds screen doesn't get flipped
 
     if (camera->pitch > 89.0f)
          camera->pitch = 89.0f;

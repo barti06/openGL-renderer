@@ -1,8 +1,9 @@
+cmake_minimum_required(VERSION 4.0)
+project(openGL VERSION 0.01 LANGUAGES C)
+
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
-cmake_minimum_required(VERSION 4.0)
-project(openGL VERSION 0.01 LANGUAGES C)
 
 #my source files
 set(SOURCES 
@@ -14,6 +15,8 @@ set(SOURCES
     src/implementations.c
     src/model.c
     src/primitive.c
+    src/world.c
+    src/entity.c
 )
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

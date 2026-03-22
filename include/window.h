@@ -2,7 +2,7 @@
 #define WINDOW_H
 
 #include <GLFW/glfw3.h>
-#include <utils.h>
+#include <stdbool.h>
 
 typedef struct Window
 {
@@ -35,7 +35,9 @@ void window_update(Window* window);
 
 void window_cleanup(Window* window);
 
-void window_disable_cursor(Window* window);
+void window_pause(Window* window);
+
+void window_unpause(Window* window);
 
 //check for key presses and others
 static inline bool is_key_pressed(const Window* w, int key)

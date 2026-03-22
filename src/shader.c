@@ -192,27 +192,27 @@ void shader_set_float(Shader* shader, const char* name, float value)
     glUniform1f(glGetUniformLocation(shader->ID, name), value);
 }
 
-void shader_set_vec2(Shader* shader, const char* name, vec2 value)
+void shader_set_vec2(Shader* shader, const char* name, const vec2 value)
 {
     glUniform2fv(glGetUniformLocation(shader->ID, name), 1, value);
 }
 
-void shader_set_vec3(Shader* shader, const char* name, vec3 value)
+void shader_set_vec3(Shader* shader, const char* name, const vec3 value)
 {
     glUniform3fv(glGetUniformLocation(shader->ID, name), 1, value);
 }
 
-void shader_set_vec4(Shader* shader, const char* name, vec4 value)
+void shader_set_vec4(Shader* shader, const char* name, const vec4 value)
 {
     glUniform4fv(glGetUniformLocation(shader->ID, name), 1, value);
 }
 
-void shader_set_mat3(Shader* shader, const char* name, mat3 value)
+void shader_set_mat3(Shader* shader, const char* name, const mat3 value)
 {
     glUniformMatrix3fv(glGetUniformLocation(shader->ID, name), 1, GL_FALSE, (const float*)value);
 }
 
-void shader_set_mat4(Shader* shader, const char* name, mat4 value)
+void shader_set_mat4(Shader* shader, const char* name, const mat4 value)
 {
     // cglm passes matrices as arrays of vectors, which then decay to pointers, making this safe
     glUniformMatrix4fv(glGetUniformLocation(shader->ID, name), 1, GL_FALSE, (const float*)value);

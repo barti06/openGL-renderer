@@ -1,8 +1,8 @@
 #ifndef MODEL_H
 #define MODEL_H
 
-#include <primitive.h>
-#include <shader.h>
+#include "primitive.h"
+#include "shader.h"
 
 typedef struct Model
 {

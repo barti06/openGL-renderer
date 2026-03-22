@@ -2,6 +2,21 @@
 #include <log.h>
 #include <string.h>
 
+static GLuint texture_loader(cgltf_texture_view* texture_view, const char* base_path);
+
+// pbr-metallic-roughness textures
+static GLuint albedo_texture_load(cgltf_primitive* primitive, const char* base_path);
+static GLuint metallic_roughness_texture_load(cgltf_primitive* primitive, const char* base_path);
+
+// pbr-specular-glossiness textures
+static GLuint diffuse_texture_load(cgltf_primitive* primitive, const char* base_path);
+static GLuint specular_glossiness_texture_load(cgltf_primitive* primitive, const char* base_path);
+
+// other textures
+static GLuint normal_texture_load(cgltf_primitive* primitive, const char* base_path);
+static GLuint emissive_texture_load(cgltf_primitive* primitive, const char* base_path);
+static GLuint occlusion_texture_load(cgltf_primitive* primitive, const char* base_path);
+
 int primitive_load(Primitive* model_primitive, cgltf_primitive *src, const char *base_path)
 {
     memset(model_primitive, 0, sizeof(*model_primitive));
@@ -53,18 +68,53 @@ int primitive_load(Primitive* model_primitive, cgltf_primitive *src, const char 
     }
 
     if(src->material->has_pbr_metallic_roughness)
-    {
+    {  
+        // textures
         model_primitive->albedo = albedo_texture_load(src, base_path);
         model_primitive->metallic_roughness = metallic_roughness_texture_load(src, base_path);
-        // wont add support for albedo factor! :D
+
+        model_primitive->albedo_factor[0] = src->material->pbr_metallic_roughness.base_color_factor[0];
+        model_primitive->albedo_factor[1] = src->material->pbr_metallic_roughness.base_color_factor[1];
+        model_primitive->albedo_factor[2] = src->material->pbr_metallic_roughness.base_color_factor[2];
+        model_primitive->albedo_factor[3] = src->material->pbr_metallic_roughness.base_color_factor[3];
+
         model_primitive->metallic_factor = src->material->pbr_metallic_roughness.metallic_factor;
         model_primitive->roughness_factor = src->material->pbr_metallic_roughness.roughness_factor;
     }
+    /* #FUCKSPECULARGLOSSINESS
+    if(src->material->has_pbr_specular_glossiness)
+    {
+        //src->material->pbr_specular_glossiness.
+        model_primitive->albedo = diffuse_texture_load(src, base_path);
+        model_primitive->metallic_roughness = metallic_roughness_texture_load(src, base_path);
+
+        model_primitive->metallic_factor[0] = src->material->pbr_specular_glossiness.specular_factor[0];
+        model_primitive->metallic_factor[1] = src->material->pbr_specular_glossiness.specular_factor[1];
+        model_primitive->metallic_factor[2] = src->material->pbr_specular_glossiness.specular_factor[2];
+
+        model_primitive->roughness_factor = 1.0f - src->material->pbr_specular_glossiness.glossiness_factor;
+    }
+    */
+    if(src->material->has_emissive_strength)
+        model_primitive->emissive_strength = src->material->emissive_strength.emissive_strength;
+    else
+        model_primitive->emissive_strength = 1.0f;
+
+    // get primitive emissive texture
+    model_primitive->emissive = emissive_texture_load(src, base_path);
+    model_primitive->emissive_factor[0] = src->material->emissive_factor[0];
+    model_primitive->emissive_factor[1] = src->material->emissive_factor[1];
+    model_primitive->emissive_factor[2] = src->material->emissive_factor[2];
+
+    // get primitive ao texture 
+    model_primitive->ambient_occlusion = occlusion_texture_load(src, base_path);
+
+    // get primitive normal texture
     model_primitive->normal = normal_texture_load(src, base_path);
 
     return 1;
 }
- 
+
 void primitive_free(Primitive* model_primitive)
 {
     if (!model_primitive) 
@@ -82,6 +132,14 @@ void primitive_free(Primitive* model_primitive)
         glDeleteBuffers(1, &model_primitive->EBO);
     if (model_primitive->albedo)        
         glDeleteTextures(1, &model_primitive->albedo);
+    if (model_primitive->metallic_roughness)        
+        glDeleteTextures(1, &model_primitive->metallic_roughness);
+    if (model_primitive->normal)        
+        glDeleteTextures(1, &model_primitive->normal);
+    if (model_primitive->emissive)        
+        glDeleteTextures(1, &model_primitive->emissive);
+    if (model_primitive->ambient_occlusion)        
+        glDeleteTextures(1, &model_primitive->ambient_occlusion);
 
     memset(model_primitive, 0, sizeof(*model_primitive));
 }
@@ -145,7 +203,6 @@ int upload_accessor_index(cgltf_accessor *accessor, GLuint EBO, GLsizei *out_cou
 static GLuint texture_loader(cgltf_texture_view* texture_view, const char* base_path)
 {
     cgltf_image* image = texture_view->texture->image;
-
     int width, height, channels;
     unsigned char *pixels = NULL;
     if (image->buffer_view) 
@@ -229,6 +286,8 @@ static GLuint texture_loader(cgltf_texture_view* texture_view, const char* base_
     return tex;
 }
 
+/*----PBR METALLIC ROUGHNESS FUNCTIONS----*/
+
 GLuint albedo_texture_load(cgltf_primitive* primitive, const char* base_path)
 {
     // get albedo texture handle from the model primitive
@@ -242,10 +301,9 @@ GLuint albedo_texture_load(cgltf_primitive* primitive, const char* base_path)
 
     return texture_loader(texture_view, base_path);
 }
-
 GLuint metallic_roughness_texture_load(cgltf_primitive* primitive, const char* base_path)
 {
-    // get albedo texture handle from the model primitive
+    // get metallic roughness texture handle from the model primitive
     cgltf_texture_view* texture_view = &primitive->material->pbr_metallic_roughness.metallic_roughness_texture;
     if (!texture_view->texture || !texture_view->texture->image) 
     {
@@ -256,13 +314,66 @@ GLuint metallic_roughness_texture_load(cgltf_primitive* primitive, const char* b
     return texture_loader(texture_view, base_path);
 }
 
+/*----PBR SPECULAR GLOSSINESS TEXTURES----*/
+
+GLuint diffuse_texture_load(cgltf_primitive* primitive, const char* base_path)
+{
+    // get diffuse texture handle from the model primitive
+    cgltf_texture_view* texture_view = &primitive->material->pbr_specular_glossiness.diffuse_texture;
+    if (!texture_view->texture || !texture_view->texture->image) 
+    {
+        log_error("ERROR... metallic_roughness_texture_load() SAYS: NO DIFFUSE TEXTURE ON GIVEN PRIMITIVE");
+        return 0;
+    }
+
+    return texture_loader(texture_view, base_path);
+}
+GLuint specular_glossiness_texture_load(cgltf_primitive* primitive, const char* base_path)
+{
+    // get diffuse texture handle from the model primitive
+    cgltf_texture_view* texture_view = &primitive->material->pbr_specular_glossiness.specular_glossiness_texture;
+    if (!texture_view->texture || !texture_view->texture->image) 
+    {
+        log_error("ERROR... metallic_roughness_texture_load() SAYS: NO DIFFUSE TEXTURE ON GIVEN PRIMITIVE");
+        return 0;
+    }
+
+    return texture_loader(texture_view, base_path);
+}
+
 GLuint normal_texture_load(cgltf_primitive* primitive, const char* base_path)
 {
-    // get albedo texture handle from the model primitive
+    // get normal texture handle from the model primitive
     cgltf_texture_view* texture_view = &primitive->material->normal_texture;
     if (!texture_view->texture || !texture_view->texture->image) 
     {
         log_error("ERROR... normal_texture_load() SAYS: NO NORMAL TEXTURE ON GIVEN PRIMITIVE");
+        return 0;
+    }
+
+    return texture_loader(texture_view, base_path);
+}
+
+GLuint emissive_texture_load(cgltf_primitive* primitive, const char* base_path)
+{
+    // get emissive texture handle from the model primitive
+    cgltf_texture_view* texture_view = &primitive->material->emissive_texture;
+    if (!texture_view->texture || !texture_view->texture->image) 
+    {
+        log_error("ERROR... emissive_texture_load() SAYS: NO EMISSIVE TEXTURE ON GIVEN PRIMITIVE");
+        return 0;
+    }
+
+    return texture_loader(texture_view, base_path);
+}
+
+GLuint occlusion_texture_load(cgltf_primitive* primitive, const char* base_path)
+{
+    // get emissive texture handle from the model primitive
+    cgltf_texture_view* texture_view = &primitive->material->occlusion_texture;
+    if (!texture_view->texture || !texture_view->texture->image) 
+    {
+        log_error("ERROR... ambient_texture_load() SAYS: NO OCCLUSION TEXTURE ON GIVEN PRIMITIVE");
         return 0;
     }
 

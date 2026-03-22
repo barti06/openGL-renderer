@@ -6,6 +6,7 @@
 #include <window.h>
 #include <camera.h>
 #include <utils.h>
+#include "world.h"
 
 typedef struct Engine
 {
@@ -24,11 +25,9 @@ typedef struct Engine
     float nearZ;
     float farZ; 
     bool canMove;
-    int loaded;
-    
-    Model model;
 
-    uint32_t VAO, VBO;
+    World* world;
+    
 } Engine;
 
 // init the engine

@@ -1,6 +1,5 @@
-#include "GLFW/glfw3.h"
 #include <window.h>
-
+#include <log.h>
 #include<string.h>
 
 static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
@@ -44,7 +43,7 @@ void init_glfw(Window* window)
 	glfwSetCursorPosCallback(window->ptr, mouse_pos_callback);
 	glfwSetMouseButtonCallback(window->ptr, mouse_button_callback);
 
-	window->is_paused = false;
+	window->is_paused = true;
 	window->first_mouse = true;
 }
 
@@ -108,15 +107,18 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 	if (button < 0 || button > GLFW_KEY_LAST)
 		return;
 
-	if (action == GLFW_PRESS) 
+	if(!self->is_paused)
 	{
-		self->mouse_buttons_pressed[button] = true;
-		self->mouse_buttons_held[button] = true;
-	}
-	else if (action == GLFW_RELEASE) 
-	{
-		self->mouse_buttons_released[button] = true;
-		self->mouse_buttons_held[button] = false;
+		if (action == GLFW_PRESS) 
+		{
+			self->mouse_buttons_pressed[button] = true;
+			self->mouse_buttons_held[button] = true;
+		}
+		else if (action == GLFW_RELEASE) 
+		{
+			self->mouse_buttons_released[button] = true;
+			self->mouse_buttons_held[button] = false;
+		}
 	}
 }
 
@@ -146,10 +148,15 @@ void window_cleanup(Window* window)
     glfwTerminate();
 }
 
-void window_disable_cursor(Window* window)
+void window_pause(Window* window)
 {
-	if(window->is_paused)
-	{
-		
-	}
+	window->is_paused = true;
+	glfwSetInputMode(window->ptr, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+}
+
+void window_unpause(Window* window)
+{
+	window->is_paused = false;
+	glfwSetInputMode(window->ptr, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	window->first_mouse = true;
 }
