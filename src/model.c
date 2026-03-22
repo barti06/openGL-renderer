@@ -3,9 +3,11 @@
 #include <model.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
+#include "texture.h"
 
 int model_load(Model* model, const char* location)
-{
+{    
     if(!model || !location)
         return 0;
 
@@ -85,6 +87,8 @@ int model_load(Model* model, const char* location)
         return 0;
     }
 
+    TextureCache texture_cache;
+    texture_cache_init(&texture_cache, 64);
     // load each primitive from the data into the model
     for (size_t mi = 0; mi < model_data->meshes_count; mi++)
     {
@@ -98,7 +102,7 @@ int model_load(Model* model, const char* location)
  
             Primitive* dest = &model->primitives[model->primitive_count];
  
-            if (!primitive_load(dest, src, base_path))
+            if (!primitive_load(dest, src, base_path, &texture_cache))
             {
                 log_error("model_load: primitive_load failed (mesh=%zu prim=%zu), skipping", mi, pi);
                 primitive_free(dest);
@@ -126,11 +130,12 @@ int model_load(Model* model, const char* location)
         if (trimmed)
             model->primitives = trimmed;
     }
- 
+
     log_info("model_load: loaded %u primitive(s) from %s", model->primitive_count, location);
 
     model->is_loaded = 1;
 
+    texture_cache_free(&texture_cache);
     return 1;
 }
 
@@ -145,13 +150,20 @@ void model_draw(const Model* model, Shader* shader)
     for (uint32_t primitive_index = 0; primitive_index < model->primitive_count; primitive_index++)
     {
         const Primitive* current_primitive = &model->primitives[primitive_index];
- 
+        
+        bool has_albedo = false;
+        bool has_metallic_roughness = false;
+        bool has_normal = false;
+        bool has_emissive = false;
+        bool has_ao = false;
+
         if (current_primitive->albedo)
         {
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, current_primitive->albedo);
             shader_set_int(shader, "u_albedo", 0);
             shader_set_vec4(shader, "u_albedo_factor", current_primitive->albedo_factor);
+            has_albedo = true;
         }
         if(current_primitive->metallic_roughness)
         {
@@ -160,12 +172,14 @@ void model_draw(const Model* model, Shader* shader)
             shader_set_int(shader, "u_metallic_roughness", 1);
             shader_set_float(shader, "u_metallic_factor", current_primitive->metallic_factor);
             shader_set_float(shader, "u_roughness_factor", current_primitive->roughness_factor);
+            has_metallic_roughness = true;
         }
         if(current_primitive->normal)
         {
             glActiveTexture(GL_TEXTURE2);
             glBindTexture(GL_TEXTURE_2D, current_primitive->normal);
             shader_set_int(shader, "u_normal", 2);
+            has_normal = true;
         }
         if(current_primitive->emissive)
         {
@@ -174,14 +188,24 @@ void model_draw(const Model* model, Shader* shader)
             shader_set_int(shader, "u_emissive", 3);
             shader_set_float(shader, "u_emissive_strength", current_primitive->emissive_strength);
             shader_set_vec3(shader, "u_emissive_factor", current_primitive->emissive_factor);
+            has_emissive = true;
         }
         if(current_primitive->ambient_occlusion)
         {
             glActiveTexture(GL_TEXTURE4);
             glBindTexture(GL_TEXTURE_2D, current_primitive->ambient_occlusion);
             shader_set_int(shader, "u_ao", 4);
+            has_ao = true;
         }
- 
+        
+        shader_set_bool(shader, "u_has_albedo", has_albedo);
+        shader_set_bool(shader, "u_has_metallic_roughness", has_metallic_roughness);
+        shader_set_bool(shader, "u_has_normal", has_normal);
+        shader_set_bool(shader, "u_has_emissive", has_emissive);
+        shader_set_bool(shader, "u_has_ao", has_ao);
+
+        glActiveTexture(GL_TEXTURE0);
+
         glBindVertexArray(current_primitive->VAO);
         glDrawElements(GL_TRIANGLES, current_primitive->index_count, current_primitive->index_type, (void *)0);
         glBindVertexArray(0);

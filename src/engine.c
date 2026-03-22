@@ -1,3 +1,4 @@
+#include "entity.h"
 #include "world.h"
 #include <basetsd.h>
 #include <engine.h>
@@ -104,7 +105,9 @@ void engine_draw(Engine* engine)
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glViewport(0, 0, engine->viewportSize.x, engine->viewportSize.y);
-        
+    
+    world_update(engine->world);
+
     shader_use(&engine->shader);
 
     // send updated camera matrices to main shader
@@ -112,7 +115,7 @@ void engine_draw(Engine* engine)
     shader_set_mat4(&engine->shader, "u_projection", engine->camera.projection);
     shader_set_vec3(&engine->shader, "u_camera_position", engine->camera.position);
 
-    for (uint32_t index = 0; index < MAX_ENTITIES; index++) 
+    for (uint32_t index = 0; index < engine->world->entities_count; index++) 
     {
         if (!engine->world->entities[index].active)
             continue;
@@ -143,17 +146,13 @@ void engine_draw(Engine* engine)
 void engine_loop(Engine* engine)
 {
     engine->world = world_create();
-    world_init(engine->world);
     while(!glfwWindowShouldClose(engine->window.ptr))
     {
         engine_updates(engine);
-        
-        log_info("FPS: %.2f", 1.0 / engine->delta_time);
 
         engine_draw(engine);
 
         window_update(&engine->window);
-
     }
 }
 

@@ -31,6 +31,12 @@ uniform sampler2D u_normal;
 uniform sampler2D u_emissive;
 uniform sampler2D u_ao;
 
+uniform bool u_has_albedo;
+uniform bool u_has_metallic_roughness;
+uniform bool u_has_normal;
+uniform bool u_has_emissive;
+uniform bool u_has_ao;
+
 uniform vec4 u_albedo_factor;
 uniform float u_metallic_factor;
 uniform float u_roughness_factor;
@@ -58,7 +64,7 @@ vec3 get_point_light(point_light light, vec3 N, vec3 fragPos, vec3 V, vec3 albed
 void main()
 {
     vec2 uv = v_uv;
-    vec4 color = texture(u_albedo, uv) * u_albedo_factor;
+    vec4 color = u_has_albedo ? texture(u_albedo, uv) * u_albedo_factor : vec4(1.0);
     if(color.a < 0.1)
         discard;
 
@@ -66,37 +72,36 @@ void main()
     vec3 albedo = pow(color.rgb, vec3(2.2));
 
     // grab material's metalness and roughness from metallic roughness texture
-    vec3 metal_rough = texture(u_metallic_roughness, uv).rgb;
+    vec3 metal_rough = u_has_metallic_roughness ? texture(u_metallic_roughness, uv).rgb : vec3(0.0);
     float roughness = metal_rough.g * u_roughness_factor;
     float metallic = metal_rough.b * u_metallic_factor;
 
     // grab the normal texture and convert from NDC
-    vec3 normal = texture(u_normal, uv).rgb;
+    vec3 normal = u_has_normal ? texture(u_normal, uv).rgb : vec3(0.0);
     normal = normal * 2.0 - 1.0;
     normal = normalize(v_TBN * normal);
 
     // extract emissive maps and convert to srgb
-    vec3 emissive_map = pow(texture(u_emissive, uv).rgb, vec3(2.2)) * u_emissive_strength;
+    vec3 emissive_map = u_has_emissive ? pow(texture(u_emissive, uv).rgb, vec3(2.2)) * u_emissive_strength : vec3(0.0);
     emissive_map *= u_emissive_factor;
 
     // get ao maps
-    float ambient_occlusion = texture(u_ao, uv).r;
+    //float ambient_occlusion = u_has_ao ? texture(u_ao, uv).r : 0.0;
 
     float norm_dot_view = max(dot(normal, v_view_direction), 0.0);
 
     point_light my_light;
-    my_light.position = vec3(0.0, 10.0, 5.0);
-    my_light.diffuse = vec3(10.0, 10.0, 10.0);
+    my_light.position = vec3(0.0, 30.0, 0.0);
+    my_light.diffuse = vec3(25.0, 25.0, 25.0);
     my_light.constant = 1.0;
     my_light.quadratic = 0.0075;
     my_light.linear = 0.045;
 
     vec3 light_result = vec3(0.0);
     light_result += get_point_light(my_light, normal, v_fragment_pos, v_view_direction, albedo, metallic, roughness, norm_dot_view);
-    float direct_ao = mix(1.0, ambient_occlusion, 0.5); // 0.5 is the 'influence'
-    light_result *= direct_ao;
 
-    vec3 ambient = vec3(0.03) * albedo * ambient_occlusion;
+    vec3 ambient = vec3(0.03) * albedo;
+    ambient *= u_has_ao ? texture(u_ao, uv).r : 1.0;
 
     vec3 final_color = vec3(0.0);
     final_color += ambient;

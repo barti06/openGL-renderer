@@ -21,6 +21,8 @@ typedef struct World
 
 // heap allocates a world (they are very heavy to always have on stack)
 World* world_create(void);
-void world_init(World* world);
+void world_update(World* world);
+void world_new_model(World* world, const char* path, 
+    const char* name, vec3 scale);
 void world_destroy(World* world);
 #endif

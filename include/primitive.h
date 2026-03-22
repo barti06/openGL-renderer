@@ -3,11 +3,8 @@
 
 #include "cglm/types.h"
 #include "cgltf.h"
-#include "stb_image.h"
 
-#include <glad/glad.h>
-
-#define MAX_MODEL_PATH_LENGTH 512
+#include "texture.h"
 
 typedef struct Primitive
 {
@@ -42,7 +39,7 @@ int upload_accessor_float(cgltf_accessor* accessor, GLuint VBO, GLuint attrib_in
 
 int upload_accessor_index(cgltf_accessor* accessor, GLuint EBO, GLsizei* out_count);
 
-int primitive_load(Primitive* model_primitive, cgltf_primitive* src, const char* base_path);
+int primitive_load(Primitive* model_primitive, cgltf_primitive* src, const char* base_path, TextureCache* cache);
 
 void primitive_free(Primitive* model_primitive);
 

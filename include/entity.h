@@ -4,7 +4,7 @@
 #include <cglm/cglm.h>
 #include "model.h"
 
-typedef uint32_t EntityID;
+typedef uint64_t EntityID;
 #define INVALID_ENTITY_ID ((EntityID)-1)
 
 typedef enum ComponentType
@@ -15,12 +15,12 @@ typedef enum ComponentType
 } ComponentType;
 
 // this one is quite the FAT struct -__-
-typedef struct TransformComponent
+typedef struct CGLM_ALIGN_MAT TransformComponent
 {
+    CGLM_ALIGN_MAT mat4 world_matrix;
     vec3 position;
     vec3 rotation;
     vec3 scale;
-    mat4 world_matrix;
     bool dirty; // check if model needs update
 } TransformComponent;
 
@@ -78,7 +78,7 @@ typedef struct LightComponent
     } lights;
 } LightComponent;
 
-#define ENTITY_NAME_MAX_LENGTH 36
+#define ENTITY_NAME_MAX_LENGTH 48
 typedef struct Entity
 {
     EntityID id;
