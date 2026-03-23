@@ -1,5 +1,4 @@
 #include "engine.h"
-#include <time.h>
 
 #define DEFAULT_NEARZ 0.1f
 #define DEFAULT_FARZ 1000.0f
@@ -81,6 +80,8 @@ void engine_handleInput(Engine* engine)
     }
     if(is_key_pressed(&engine->window, GLFW_KEY_F5))
         shader_reload_frag(&engine->shader);
+    if(is_key_pressed(&engine->window, GLFW_KEY_F6))
+        shader_reload_frag(&engine->renderer.quad_shader);
     if(is_key_pressed(&engine->window, GLFW_KEY_J))
     {
         engine->swap_interv = !engine->swap_interv;
@@ -106,6 +107,7 @@ void engine_draw(Engine* engine)
 {
     renderer_draw_world(engine->world, &engine->renderer);
 }
+
 void engine_loop(Engine* engine)
 {    
 

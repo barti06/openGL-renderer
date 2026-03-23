@@ -100,6 +100,16 @@ void main()
 
     float norm_dot_view = max(dot(normal, v_view_direction), 0.0);
 
+    vec3 ambient = vec3(0.1) * albedo;
+
+    float ao_sample = u_has_ao ? texture(u_ao, uv).r : 1.0;
+    float ao = mix(1.0, ao_sample, u_occlusion_strength);
+    ambient *= ao;
+
+    vec3 final_color = vec3(0.0);
+    final_color += ambient;
+    final_color += emissive_map;
+   
     point_light my_light;
     my_light.position = vec3(0.0, 10.0, 0.0);
     my_light.diffuse = vec3(2.0, 2.0, 2.0);
@@ -110,17 +120,8 @@ void main()
     vec3 light_result = vec3(0.0);
     light_result += get_point_light(my_light, normal, v_fragment_pos, v_view_direction, albedo, metallic, roughness, norm_dot_view);
 
-    vec3 ambient = vec3(0.1) * albedo;
-
-    float ao_sample = u_has_ao ? texture(u_ao, uv).r : 1.0;
-    float ao = mix(1.0, ao_sample, u_occlusion_strength);
-    ambient *= ao;
-
-    vec3 final_color = vec3(0.0);
-    final_color += ambient;
     final_color += light_result;
-    final_color += emissive_map;
-
+    
     final_color = ACESFilm(final_color);
     final_color = pow(final_color, vec3(1.0 / 2.2));
 

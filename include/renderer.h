@@ -7,12 +7,20 @@
 
 typedef struct Renderer
 {
-    // engine owns all shaders, renderer juts uses them in a given order
+    // engine owns most, renderer juts uses them in a given order
     Shader* active_shader;
 
     vec2 viewportSize;
     float nearZ;
     float farZ;
+
+    // bit of a mess for now
+    GLuint fbo;
+    GLuint quad_VAO;
+    GLuint quad_VBO;
+    GLuint quad_tex_color;
+    GLuint quad_tex_depth;
+    Shader quad_shader;
 } Renderer;
 
 void renderer_init(Renderer* renderer, Shader* shader, 
