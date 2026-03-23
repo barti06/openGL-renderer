@@ -8,4 +8,5 @@ Basic OpenGL renderer written in C and using the following dependencies:
 - [stb_image](https://github.com/nothings/stb)
 - [log.c](https://github.com/rxi/log.c)
 - [stb_image](https://github.com/nothings/stb)
+
 And using [glad](https://glad.dav1d.de/) as the openGL loader.
