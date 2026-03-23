@@ -45,7 +45,6 @@ uniform float u_metallic_factor;
 uniform float u_roughness_factor;
 
 uniform float u_occlusion_strength;
-uniform vec2 u_occlusion_scale;
 uniform vec2 u_normal_scale;
 
 uniform float u_emissive_strength;
@@ -113,7 +112,7 @@ void main()
 
     vec3 ambient = vec3(0.1) * albedo;
 
-    float ao_sample = u_has_ao ? texture(u_ao, uv * u_occlusion_scale).r : 1.0;
+    float ao_sample = u_has_ao ? texture(u_ao, uv).r : 1.0;
     float ao = mix(1.0, ao_sample, u_occlusion_strength);
     ambient *= ao;
 

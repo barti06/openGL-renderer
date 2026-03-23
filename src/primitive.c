@@ -92,7 +92,6 @@ int primitive_load(Primitive* model_primitive, cgltf_primitive *src, const char 
 
     // get primitive ao texture 
     model_primitive->ambient_occlusion = occlusion_texture_load(src, base_path, cache);
-    memcpy(model_primitive->occlusion_scale, src->material->occlusion_texture.transform.scale, sizeof(vec2));
 
     // get primitive normal texture
     model_primitive->normal = normal_texture_load(src, base_path, cache);

@@ -31,7 +31,6 @@ typedef struct Primitive
     float roughness_factor;
     vec2 normal_scale;
     float occlusion_strength;
-    vec2 occlusion_scale;
     vec3 emissive_factor;
     float emissive_strength;
     float iridescence_thickness_max;
@@ -48,9 +47,9 @@ typedef struct Primitive
 
 typedef struct Mesh
 {
+    mat4 transform;
     Primitive* primitives;
     uint32_t primitive_count;
-    mat4 transform;
 } Mesh;
 
 int upload_accessor_float(cgltf_accessor* accessor, GLuint VBO, GLuint attrib_index, GLint num_components);

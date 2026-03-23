@@ -130,21 +130,15 @@ void camera_process_rotation(Camera* camera, float xoffset, float yoffset)
     camera_update_vectors(camera);
 }
 
-void camera_update_matrices(Camera* camera, Svec2f viewportSize, float nearZ, float farZ)
+void camera_update_matrices(Camera* camera, vec2 viewportSize, float nearZ, float farZ)
 {
     // get view matrix
-    vec3 pos_add_front; // get around to cglm constrains
+    vec3 pos_add_front;
     glm_vec3_add(camera->position, camera->front, pos_add_front);
-    glm_lookat(
-        camera->position, 
-        pos_add_front, 
-        camera->up, 
-        camera->view);
+    glm_lookat(camera->position, pos_add_front, camera->up, camera->view);
         
     // get projection matrix
-    glm_perspective(
-        glm_rad(camera->fieldOfView), 
-        (viewportSize.x / viewportSize.y), 
-        nearZ, farZ,
-        camera->projection);
+    glm_perspective(glm_rad(camera->fieldOfView), 
+        (viewportSize[0] / viewportSize[1]), nearZ, 
+        farZ, camera->projection);
 }

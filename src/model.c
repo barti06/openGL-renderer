@@ -4,7 +4,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
-#include "world.h"
 #include "texture.h"
 
 int model_load(Model* model, const char* location)
@@ -17,6 +16,7 @@ int model_load(Model* model, const char* location)
     strncpy(model->filepath, location, MAX_MODEL_PATH_LENGTH - 1);
     model->filepath[MAX_MODEL_PATH_LENGTH - 1] = '\0';
 
+    clock_t time = clock();
     model->is_loaded = 0;
 
     cgltf_options model_options = {0};
@@ -160,7 +160,8 @@ int model_load(Model* model, const char* location)
         return 0;
     }
 
-    log_info("model_load() SAYS: LOADED %u MESHES FROM %s", model->mesh_count, location);
+    time = clock() - time;
+    log_info("model_load() SAYS: LOADED %u MESHES IN %.3f SECONDS. SOURCE: %s", model->mesh_count, (float)time / CLOCKS_PER_SEC, location);
 
     model->is_loaded = 1;
 
@@ -232,7 +233,6 @@ void model_draw(const Model* model, Shader* shader, mat4 world_matrix)
                 glBindTexture(GL_TEXTURE_2D, current_primitive->ambient_occlusion);
                 shader_set_int(shader, "u_ao", 4);
                 shader_set_float(shader, "u_occlusion_strength", current_primitive->occlusion_strength);
-                shader_set_vec2(shader, "u_occlusion_scale", current_primitive->occlusion_scale);
                 has_ao = true;
             }
             if(current_primitive->iridescence)
@@ -243,6 +243,11 @@ void model_draw(const Model* model, Shader* shader, mat4 world_matrix)
                 glActiveTexture(GL_TEXTURE6);
                 glBindTexture(GL_TEXTURE_2D, current_primitive->iridescence_thickness);
                 shader_set_int(shader, "u_iridescence_thickness", 6);
+                
+                shader_set_float(shader, "u_iridescence_thickness_max", current_primitive->iridescence_thickness_max);
+                shader_set_float(shader, "u_iridescence_thickness_min", current_primitive->iridescence_thickness_min);
+                shader_set_float(shader, "u_iridescence_factor", current_primitive->iridescence_factor);
+                shader_set_float(shader, "u_iridescence_ior", current_primitive->iridescence_ior);
             }
 
             shader_set_bool(shader, "u_has_albedo", has_albedo);
@@ -261,16 +266,12 @@ void model_draw(const Model* model, Shader* shader, mat4 world_matrix)
             shader_set_bool(shader, "u_has_ao", has_ao);
             // to avoid using another bool
             shader_set_bool(shader, "u_has_iridescence", current_primitive->iridescence_factor > 0.0f);
-            shader_set_float(shader, "u_iridescence_thickness_max", current_primitive->iridescence_thickness_max);
-            shader_set_float(shader, "u_iridescence_thickness_min", current_primitive->iridescence_thickness_min);
-            shader_set_float(shader, "u_iridescence_factor", current_primitive->iridescence_factor);
-            shader_set_float(shader, "u_iridescence_ior", current_primitive->iridescence_ior);
 
 
             glActiveTexture(GL_TEXTURE0);
 
             glBindVertexArray(current_primitive->VAO);
-            glDrawElements(GL_TRIANGLES, current_primitive->index_count, current_primitive->index_type, (void *)0);
+            glDrawElements(GL_TRIANGLES, current_primitive->index_count, current_primitive->index_type, (void*)0);
             glBindVertexArray(0);
         }
     }

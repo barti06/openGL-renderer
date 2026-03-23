@@ -52,5 +52,5 @@ void camera_process_movement(Camera* camera, float delta_time, InputType input_t
 
 void camera_process_rotation(Camera* camera, float xoffset, float yoffset);
 
-void camera_update_matrices(Camera* camera, Svec2f viewportSize, float nearZ, float farZ);
+void camera_update_matrices(Camera* camera, vec2 viewportSize, float nearZ, float farZ);
 #endif

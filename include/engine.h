@@ -1,20 +1,18 @@
 #ifndef ENGINE_H
 #define ENGINE_H
 
-#include <shader.h>
-#include <model.h>
-#include <window.h>
-#include <camera.h>
-#include <utils.h>
+#include "shader.h"
+#include "window.h"
+#include "camera.h"
 #include "world.h"
+#include "renderer.h"
 
 typedef struct Engine
 {
     Window window;
+    // engine just owns the shaders, does not interact with them
     Shader shader;
-    Camera camera;
-
-    Svec2f viewportSize;
+    Renderer renderer;
 
     float last_time;
     float delta_time;
@@ -22,8 +20,6 @@ typedef struct Engine
 
     bool swap_interv;
 
-    float nearZ;
-    float farZ; 
     bool canMove;
 
     World* world;

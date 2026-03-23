@@ -30,6 +30,7 @@ target_sources(${PROJECT_NAME} PRIVATE
     src/world.c
     src/entity.c
     src/texture.c
+    src/renderer.c
 )
 
 # use std C11
@@ -42,7 +43,15 @@ target_compile_options(${PROJECT_NAME} PRIVATE
         -O3 -march=native -ffast-math -funroll-loops -fomit-frame-pointer>
     $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,MSVC>>:
         /O2 /fp:fast /GL>
-    $<$<CONFIG:Debug>:-g -O0 -fno-omit-frame-pointer>
+
+    $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>>:
+        -g -O0 -fno-omit-frame-pointer>
+    $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANG_AND_ID:C,MSVC>>:
+        /ZI /Od /RTC1>
+)
+
+target_link_options(${PROJECT_NAME} PRIVATE
+    $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANG_AND_ID:C,MSVC>>:/DEBUG>
 )
 
 set_property(TARGET ${PROJECT_NAME} PROPERTY
@@ -62,6 +71,7 @@ add_subdirectory(lib/glfw)
 
 # include cglm
 set(CGLM_STATIC ON CACHE INTERNAL "") 
+set(CMAKE_BUILD_TYPE Debug CACHE STRING "" FORCE)
 add_subdirectory(lib/cglm)
 
 # include glad

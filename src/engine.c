@@ -1,7 +1,8 @@
-#include "entity.h"
-#include "world.h"
-#include <basetsd.h>
-#include <engine.h>
+#include "engine.h"
+#include <time.h>
+
+#define DEFAULT_NEARZ 0.1f
+#define DEFAULT_FARZ 1000.0f
 
 void engine_init(Engine* engine)
 {
@@ -22,12 +23,19 @@ void engine_init(Engine* engine)
     // init shader
 	shader_init(&engine->shader, "shaders/vertex.vert", "shaders/fragment.frag");
 
-    engine->camera = camera_init();
+    engine->world = world_create();
+    world_new_model(engine->world, "resources/sponza/Sponza.gltf", "sponza");
+    //world_new_model(engine->world, "resources/DamagedHelmet.glb", "helm");
+    //world_new_model(engine->world, "resources/ABeautifulGame.glb", "chess");
+    //world_new_model(engine->world, "resources/CarConcept.glb", "car");
+    //world_new_model(engine->world, "resources/Bistro_Godot.glb", "bistro");
+    //world_new_model(engine->world, "resources/porsche/scene.gltf", "porsche");
+    //world_new_model(engine->world, "resources/DiffuseTransmissionTeacup.glb", "teacup");
+    //world_new_model(engine->world, "resources/ToyCar.glb", "toycar");
+    engine->world->camera = camera_init();
+    renderer_init(&engine->renderer, &engine->shader, engine->window.width, engine->window.width, DEFAULT_NEARZ, DEFAULT_FARZ);
+
     engine->last_time = 0.0f; // init delta timing
-
-    engine->nearZ = 0.1f;
-    engine->farZ = 1000.0f;
-
     engine->canMove = false;
 }
 
@@ -41,24 +49,24 @@ void engine_handleInput(Engine* engine)
         else if(is_key_held(&engine->window, GLFW_KEY_LEFT_CONTROL))
             action = CROUCH;
         if(is_key_held(&engine->window, GLFW_KEY_W))
-            camera_process_movement(&engine->camera, engine->delta_time, FORWARD, action);
+            camera_process_movement(&engine->world->camera, engine->delta_time, FORWARD, action);
 
         if(is_key_held(&engine->window, GLFW_KEY_A))
-            camera_process_movement(&engine->camera, engine->delta_time, LEFT, action);
+            camera_process_movement(&engine->world->camera, engine->delta_time, LEFT, action);
 
         if(is_key_held(&engine->window, GLFW_KEY_S))
-            camera_process_movement(&engine->camera, engine->delta_time, BACKWARD, action);
+            camera_process_movement(&engine->world->camera, engine->delta_time, BACKWARD, action);
 
         if(is_key_held(&engine->window, GLFW_KEY_D))
-            camera_process_movement(&engine->camera, engine->delta_time, RIGHT, action);
+            camera_process_movement(&engine->world->camera, engine->delta_time, RIGHT, action);
 
         if(is_key_held(&engine->window, GLFW_KEY_SPACE))
-            camera_process_movement(&engine->camera, engine->delta_time, UP, action);
+            camera_process_movement(&engine->world->camera, engine->delta_time, UP, action);
 
         if(is_key_held(&engine->window, GLFW_KEY_LEFT_CONTROL))
-            camera_process_movement(&engine->camera, engine->delta_time, DOWN, action);
+            camera_process_movement(&engine->world->camera, engine->delta_time, DOWN, action);
 
-        camera_process_rotation(&engine->camera, engine->window.xoffset, engine->window.yoffset);
+        camera_process_rotation(&engine->world->camera, engine->window.xoffset, engine->window.yoffset);
     }
     if(is_key_pressed(&engine->window, GLFW_KEY_P))
         glfwSetWindowShouldClose(engine->window.ptr, true);
@@ -88,47 +96,18 @@ void engine_updates(Engine* engine)
     engine->last_time = engine->current_time;
 
     engine_handleInput(engine);
-    
-    // set viewport size to full window size (for now at least)
-    engine->viewportSize.x = engine->window.width;
-    engine->viewportSize.y = engine->window.height;
 
-    // update the camera
-    camera_update_matrices(&engine->camera, 
-        engine->viewportSize, 
-        engine->nearZ, 
-        engine->farZ);
+    world_update(engine->world);
+
+    renderer_updates(engine->world, &engine->renderer, engine->window.width, engine->window.height);
 }
 
 void engine_draw(Engine* engine)
 {
-    glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glViewport(0, 0, engine->viewportSize.x, engine->viewportSize.y);
-
-    shader_use(&engine->shader);
-
-    // send updated camera matrices to main shader
-    shader_set_mat4(&engine->shader, "u_view", engine->camera.view);
-    shader_set_mat4(&engine->shader, "u_projection", engine->camera.projection);
-    shader_set_vec3(&engine->shader, "u_camera_position", engine->camera.position);
-    
-    world_update(engine->world, &engine->shader);
-
+    renderer_draw_world(engine->world, &engine->renderer);
 }
-
 void engine_loop(Engine* engine)
-{
-    engine->world = world_create();
-    
-    //world_new_model(engine->world, "resources/sponza/Sponza.gltf", "sponza");
-    world_new_model(engine->world, "resources/DamagedHelmet.glb", "helm");
-    //world_new_model(engine->world, "resources/ABeautifulGame.glb", "chess");
-    //world_new_model(engine->world, "resources/CarConcept.glb", "car");
-    //world_new_model(engine->world, "resources/Bistro_Godot.glb", "bistro");
-    //world_new_model(engine->world, "resources/porsche/scene.gltf", "porsche");
-    //world_new_model(engine->world, "resources/DiffuseTransmissionTeacup.glb", "teacup");
-    //world_new_model(engine->world, "resources/ToyCar.glb", "toycar");
+{    
 
     while(!glfwWindowShouldClose(engine->window.ptr))
     {

@@ -1,16 +1,17 @@
 #include "world.h"
 #include "entity.h"
 #include "model.h"
-#include <basetsd.h>
 #include <stdint.h>
 #include <string.h>
 
 World* world_create(void)
 {
+    size_t size = sizeof(World);
+    size_t padded_size = (size + 31) & ~31;
 #ifdef _WIN32
-    World* world = _aligned_malloc(sizeof(World), 32);
+    World* world = _aligned_malloc(padded_size, 32);
 #else
-    World* world = aligned_malloc(32);
+    World* world = aligned_malloc(32, padded_size);
 #endif
 
     if(!world)
@@ -76,35 +77,15 @@ static inline RenderableComponent* world_add_renderable(World* world, EntityID i
     return &world->renderables[id];
 }
 
-void world_update(World* world, Shader* shader)
+void world_update(World* world)
 {
-    for(uint64_t index = 0; index < world->entities_count; index++)
+    for(size_t index = 0; index < world->entities_count; index++)
     {
         if(!world->entities[index].active)
             continue;
         if (!entity_has_component(&world->entities[index], COMPONENT_TRANSFORM))
             continue;
         transform_update(&world->transforms[index]);
-
-        uint32_t needed = COMPONENT_TRANSFORM | COMPONENT_RENDERABLE;
-        if (!entity_has_component(&world->entities[index], needed))
-            continue;
-
-        RenderableComponent* rc = &world->renderables[index];
-        if (!renderable_has_flag(rc, RENDER_FLAG_VISIBLE))
-            continue;
-
-        if (renderable_has_flag(rc, RENDER_FLAG_NOCULL))
-            glDisable(GL_CULL_FACE);
-        if (renderable_has_flag(rc, RENDER_FLAG_WIREFRAME))
-            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
-        model_draw(rc->model, shader, world->transforms[index].world_matrix);
-
-        if (renderable_has_flag(rc, RENDER_FLAG_NOCULL))
-            glEnable(GL_CULL_FACE);
-        if (renderable_has_flag(rc, RENDER_FLAG_WIREFRAME))
-            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 }
 
