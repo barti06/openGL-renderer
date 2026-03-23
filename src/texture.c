@@ -11,7 +11,7 @@ GLuint texture_loader(cgltf_texture_view* texture_view, const char* base_path, T
     uint32_t cached_tex = texture_cache_get(cache, image);
     if(cached_tex)
         return cached_tex;
-
+    
     int width, height, channels;
     unsigned char *pixels = NULL;
     if (image->buffer_view) 
@@ -119,6 +119,32 @@ GLuint metallic_roughness_texture_load(cgltf_primitive* primitive, const char* b
     if (!texture_view->texture || !texture_view->texture->image) 
     {
         log_error("ERROR... metallic_roughness_texture_load() SAYS: NO METALLIC ROUGHNESS TEXTURE ON GIVEN PRIMITIVE");
+        return 0;
+    }
+
+    return texture_loader(texture_view, base_path, cache);
+}
+
+/*---- IRIDESCENCE TEXTURES FUNCTION ----*/
+GLuint iridescence_texture_load(cgltf_primitive* primitive, const char* base_path, TextureCache* cache)
+{
+    // get metallic roughness texture handle from the model primitive
+    cgltf_texture_view* texture_view = &primitive->material->iridescence.iridescence_texture;
+    if (!texture_view->texture || !texture_view->texture->image) 
+    {
+        log_error("ERROR... iridescence_texture_load() SAYS: NO IRIDESCENCE TEXTURE ON GIVEN PRIMITIVE");
+        return 0;
+    }
+
+    return texture_loader(texture_view, base_path, cache);
+}
+GLuint iridescence_thickness_texture_load(cgltf_primitive* primitive, const char* base_path, TextureCache* cache)
+{
+    // get metallic roughness texture handle from the model primitive
+    cgltf_texture_view* texture_view = &primitive->material->iridescence.iridescence_thickness_texture;
+    if (!texture_view->texture || !texture_view->texture->image) 
+    {
+        log_error("ERROR... iridescence_texture_load() SAYS: NO IRIDESCENCE THICKNESS TEXTURE ON GIVEN PRIMITIVE");
         return 0;
     }
 

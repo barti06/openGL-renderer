@@ -15,15 +15,15 @@ typedef enum ComponentType
 } ComponentType;
 
 // this one is quite the FAT struct -__-
-typedef struct CGLM_ALIGN_MAT TransformComponent
+typedef struct TransformComponent
 {
-    CGLM_ALIGN_MAT mat4 world_matrix;
+    mat4 world_matrix;
     vec3 position;
     vec3 rotation;
     vec3 scale;
     bool dirty; // check if model needs update
 } TransformComponent;
-
+ 
 typedef enum RenderFlags
 {
     RENDER_FLAG_VISIBLE = 1 << 0,

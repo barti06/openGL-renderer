@@ -4,9 +4,9 @@
 // Default camera values
 const float D_YAW = -90.0f;
 const float D_PITCH = 0.0f;
-const float D_SPEED = 15.0f;
+const float D_SPEED = 5.0f;
 const float D_SENSITIVITY = 0.333f;
-const float D_FOV = 90.0f;
+const float D_FOV = 75.0f;
 
 void camera_update_vectors(Camera* camera)
 {

@@ -7,8 +7,9 @@
 typedef struct Model
 {
     // store the gltf model meshes
-    Primitive* primitives;
-    uint32_t primitive_count;
+    Mesh* meshes;
+    uint32_t mesh_count;
+    uint32_t model_primitive_count;
 
     // store path of the loaded model
     char filepath[MAX_MODEL_PATH_LENGTH];
@@ -21,7 +22,7 @@ typedef struct Model
 int model_load(Model* model, const char* location);
 
 // this function takes a model for drawing and a shader to draw to
-void model_draw(const Model* model, Shader* shader);
+void model_draw(const Model* model, Shader* shader, mat4 world_matrix);
 
 // this function deletes everything related to the model
 void model_free(Model* model);

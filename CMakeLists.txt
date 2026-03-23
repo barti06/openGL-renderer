@@ -1,18 +1,22 @@
 cmake_minimum_required(VERSION 4.0)
 project(openGL-renderer VERSION 0.01 LANGUAGES C)
 
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
-    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+if(MSVC)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# send the openGL bins to ./bin
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin)
+# send the openGL bins to ./bin/xxx
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG   ${CMAKE_CURRENT_SOURCE_DIR}/bin/debug)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_SOURCE_DIR}/bin/release)
+
+if(NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+    string(TOLOWER "${CMAKE_BUILD_TYPE}" _cfg_lower)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin/${_cfg_lower})
+endif()
 
 add_executable(${PROJECT_NAME} ${SOURCES})
-
 #my source files
 target_sources(${PROJECT_NAME} PRIVATE
     src/main.c
@@ -33,15 +37,18 @@ target_compile_features(${PROJECT_NAME} PRIVATE c_std_11)
 
 # compiler flags
 target_compile_options(${PROJECT_NAME} PRIVATE
+    
     $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>>:
         -O3 -march=native -ffast-math -funroll-loops -fomit-frame-pointer>
     $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,MSVC>>:
         /O2 /fp:fast /GL>
+    $<$<CONFIG:Debug>:-g -O0 -fno-omit-frame-pointer>
 )
 
 set_property(TARGET ${PROJECT_NAME} PROPERTY
     INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE
 )
+
 # my header files
 target_include_directories(${PROJECT_NAME} 
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include

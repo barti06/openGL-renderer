@@ -9,7 +9,7 @@ void engine_init(Engine* engine)
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
 	{
-		log_error("\nError at Engine::init. glad couldn't load!\n");
+		log_error("\nERROR... engine_init() SAYS: COULDN'T LOAD GLAD!\n");
 	}
 
     glViewport(0, 0, 1600, 900);
@@ -105,8 +105,6 @@ void engine_draw(Engine* engine)
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glViewport(0, 0, engine->viewportSize.x, engine->viewportSize.y);
-    
-    world_update(engine->world);
 
     shader_use(&engine->shader);
 
@@ -114,41 +112,29 @@ void engine_draw(Engine* engine)
     shader_set_mat4(&engine->shader, "u_view", engine->camera.view);
     shader_set_mat4(&engine->shader, "u_projection", engine->camera.projection);
     shader_set_vec3(&engine->shader, "u_camera_position", engine->camera.position);
+    
+    world_update(engine->world, &engine->shader);
 
-    for (uint32_t index = 0; index < engine->world->entities_count; index++) 
-    {
-        if (!engine->world->entities[index].active)
-            continue;
-
-        uint32_t needed = COMPONENT_TRANSFORM | COMPONENT_RENDERABLE;
-        if (!entity_has_component(&engine->world->entities[index], needed))
-            continue;
-
-        RenderableComponent* rc = &engine->world->renderables[index];
-        if (!renderable_has_flag(rc, RENDER_FLAG_VISIBLE))
-            continue;
-
-        if (renderable_has_flag(rc, RENDER_FLAG_NOCULL))
-            glDisable(GL_CULL_FACE);
-        if (renderable_has_flag(rc, RENDER_FLAG_WIREFRAME))
-            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
-        shader_set_mat4(&engine->shader, "u_model", engine->world->transforms[index].world_matrix);
-        model_draw(rc->model, &engine->shader);
-
-        if (renderable_has_flag(rc, RENDER_FLAG_NOCULL))
-            glEnable(GL_CULL_FACE);
-        if (renderable_has_flag(rc, RENDER_FLAG_WIREFRAME))
-            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    }
 }
 
 void engine_loop(Engine* engine)
 {
     engine->world = world_create();
+    
+    //world_new_model(engine->world, "resources/sponza/Sponza.gltf", "sponza");
+    world_new_model(engine->world, "resources/DamagedHelmet.glb", "helm");
+    //world_new_model(engine->world, "resources/ABeautifulGame.glb", "chess");
+    //world_new_model(engine->world, "resources/CarConcept.glb", "car");
+    //world_new_model(engine->world, "resources/Bistro_Godot.glb", "bistro");
+    //world_new_model(engine->world, "resources/porsche/scene.gltf", "porsche");
+    //world_new_model(engine->world, "resources/DiffuseTransmissionTeacup.glb", "teacup");
+    //world_new_model(engine->world, "resources/ToyCar.glb", "toycar");
+
     while(!glfwWindowShouldClose(engine->window.ptr))
     {
         engine_updates(engine);
+
+        log_info("fps: %.2f", 1.0 / engine->delta_time);
 
         engine_draw(engine);
 

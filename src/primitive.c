@@ -7,6 +7,10 @@ int primitive_load(Primitive* model_primitive, cgltf_primitive *src, const char 
 {
     memset(model_primitive, 0, sizeof(*model_primitive));
  
+    /*---- GPU DATA SEND START ----*/
+
+    // flag to check correct gpu data upload
+    int ok = 1;
     glGenVertexArrays(1, &model_primitive->VAO);
     glBindVertexArray(model_primitive->VAO);
  
@@ -15,11 +19,8 @@ int primitive_load(Primitive* model_primitive, cgltf_primitive *src, const char 
     glGenBuffers(1, &model_primitive->VBO_uvs);
     glGenBuffers(1, &model_primitive->VBO_tangents);
     glGenBuffers(1, &model_primitive->EBO);
- 
-    // flag to check correct gpu data upload
-    int ok = 1;
- 
-    // upload data to gpu
+    
+    // upload attribute data to gpu
     for (uint64_t attribute_index = 0; attribute_index < src->attributes_count; attribute_index++)
     {
         cgltf_attribute* attribute = &src->attributes[attribute_index];
@@ -33,6 +34,7 @@ int primitive_load(Primitive* model_primitive, cgltf_primitive *src, const char 
         // pass primitive uvs to gpu
         else if(attribute->type == cgltf_attribute_type_texcoord && attribute->index == 0)
             ok &= upload_accessor_float(attribute->data, model_primitive->VBO_uvs, 2, 2);
+        // pass primitive tangents to gpu
         else if(attribute->type == cgltf_attribute_type_tangent)
             ok &= upload_accessor_float(attribute->data, model_primitive->VBO_tangents, 3, 4);
     }
@@ -47,7 +49,8 @@ int primitive_load(Primitive* model_primitive, cgltf_primitive *src, const char 
  
     if (!ok) 
         return 0;
- 
+    /*---- GPU DATA SEND END ----*/
+
     if (!src->material) 
     {
         log_error("ERROR... primitive_load() SAYS: PRIMITIVE CONTAINS NO MATERIAL");
@@ -74,17 +77,26 @@ int primitive_load(Primitive* model_primitive, cgltf_primitive *src, const char 
     else
         model_primitive->emissive_strength = 1.0f;
 
+    if(src->material->has_iridescence)
+    {
+        model_primitive->iridescence = iridescence_texture_load(src, base_path, cache);
+        model_primitive->iridescence_thickness = iridescence_thickness_texture_load(src, base_path, cache);
+        model_primitive->iridescence_thickness_max = src->material->iridescence.iridescence_thickness_max;
+        model_primitive->iridescence_thickness_min = src->material->iridescence.iridescence_thickness_min;
+        model_primitive->iridescence_factor = src->material->iridescence.iridescence_factor;
+        model_primitive->iridescence_ior = src->material->iridescence.iridescence_ior;
+    }
     // get primitive emissive texture
     model_primitive->emissive = emissive_texture_load(src, base_path, cache);
-    model_primitive->emissive_factor[0] = src->material->emissive_factor[0];
-    model_primitive->emissive_factor[1] = src->material->emissive_factor[1];
-    model_primitive->emissive_factor[2] = src->material->emissive_factor[2];
+    memcpy(model_primitive->emissive_factor, src->material->emissive_factor, sizeof(vec3));
 
     // get primitive ao texture 
     model_primitive->ambient_occlusion = occlusion_texture_load(src, base_path, cache);
+    memcpy(model_primitive->occlusion_scale, src->material->occlusion_texture.transform.scale, sizeof(vec2));
 
     // get primitive normal texture
     model_primitive->normal = normal_texture_load(src, base_path, cache);
+    memcpy(model_primitive->normal_scale, src->material->normal_texture.transform.scale, sizeof(vec2));
 
     return 1;
 }
@@ -116,6 +128,21 @@ void primitive_free(Primitive* model_primitive)
         glDeleteTextures(1, &model_primitive->ambient_occlusion);
 
     memset(model_primitive, 0, sizeof(*model_primitive));
+}
+
+void mesh_free(Mesh* model_mesh)
+{
+    if(!model_mesh)
+        return;
+
+    // free each primitive
+    for(size_t i = 0; i < model_mesh->primitive_count; i++)
+        primitive_free(&model_mesh->primitives[i]);
+
+    // deallocate primitive's memory 
+    free(model_mesh->primitives);
+
+    memset(model_mesh, 0, sizeof(*model_mesh));
 }
 
 /*----START ACCESSOR DEFINITIONS----*/

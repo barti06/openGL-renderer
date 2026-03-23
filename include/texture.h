@@ -23,6 +23,10 @@ GLuint texture_loader(cgltf_texture_view* texture_view, const char* base_path, T
 // pbr-metallic-roughness textures
 GLuint albedo_texture_load(cgltf_primitive* primitive, const char* base_path, TextureCache* cache);
 GLuint metallic_roughness_texture_load(cgltf_primitive* primitive, const char* base_path, TextureCache* cache);
+// iridescence textures
+GLuint iridescence_texture_load(cgltf_primitive* primitive, const char* base_path, TextureCache* cache);
+GLuint iridescence_thickness_texture_load(cgltf_primitive* primitive, const char* base_path, TextureCache* cache);
+
 // other textures
 GLuint normal_texture_load(cgltf_primitive* primitive, const char* base_path, TextureCache* cache);
 GLuint emissive_texture_load(cgltf_primitive* primitive, const char* base_path, TextureCache* cache);

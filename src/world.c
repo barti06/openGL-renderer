@@ -10,7 +10,7 @@ World* world_create(void)
 #ifdef _WIN32
     World* world = _aligned_malloc(sizeof(World), 32);
 #else
-    World* world = aligned_malloc(32, sizeof(World));
+    World* world = aligned_malloc(32);
 #endif
 
     if(!world)
@@ -54,7 +54,7 @@ static inline Model* world_add_model(World* world, const char* path)
 
 static inline TransformComponent* world_add_transform(World* world, EntityID id)
 {
-    if(id > MAX_ENTITIES)
+    if(id > MAX_ENTITIES - 1)
         return NULL;
 
     entity_add_component(&world->entities[id], COMPONENT_TRANSFORM);
@@ -66,7 +66,7 @@ static inline TransformComponent* world_add_transform(World* world, EntityID id)
 
 static inline RenderableComponent* world_add_renderable(World* world, EntityID id, Model* model)
 {
-    if(id > MAX_ENTITIES)
+    if(id > MAX_ENTITIES - 1)
         return NULL;
     
     entity_add_component(&world->entities[id], COMPONENT_RENDERABLE);
@@ -76,7 +76,7 @@ static inline RenderableComponent* world_add_renderable(World* world, EntityID i
     return &world->renderables[id];
 }
 
-void world_update(World* world)
+void world_update(World* world, Shader* shader)
 {
     for(uint64_t index = 0; index < world->entities_count; index++)
     {
@@ -85,10 +85,30 @@ void world_update(World* world)
         if (!entity_has_component(&world->entities[index], COMPONENT_TRANSFORM))
             continue;
         transform_update(&world->transforms[index]);
+
+        uint32_t needed = COMPONENT_TRANSFORM | COMPONENT_RENDERABLE;
+        if (!entity_has_component(&world->entities[index], needed))
+            continue;
+
+        RenderableComponent* rc = &world->renderables[index];
+        if (!renderable_has_flag(rc, RENDER_FLAG_VISIBLE))
+            continue;
+
+        if (renderable_has_flag(rc, RENDER_FLAG_NOCULL))
+            glDisable(GL_CULL_FACE);
+        if (renderable_has_flag(rc, RENDER_FLAG_WIREFRAME))
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+        model_draw(rc->model, shader, world->transforms[index].world_matrix);
+
+        if (renderable_has_flag(rc, RENDER_FLAG_NOCULL))
+            glEnable(GL_CULL_FACE);
+        if (renderable_has_flag(rc, RENDER_FLAG_WIREFRAME))
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     }
 }
 
-void world_new_model(World* world, const char* path, const char* name, vec3 scale)
+void world_new_model(World* world, const char* path, const char* name)
 {
     log_info("world_new_model() SAYS: ADDING NEW MODEL ENTITY...");
 
@@ -97,7 +117,6 @@ void world_new_model(World* world, const char* path, const char* name, vec3 scal
     EntityID e = world_create_entity(world, name);
 
     TransformComponent* tc = world_add_transform(world, e);
-    transform_set_scale_vec3(tc, scale);
 
     RenderableComponent* rc = world_add_renderable(world, e, m);
 
