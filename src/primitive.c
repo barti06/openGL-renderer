@@ -3,12 +3,86 @@
 #include <string.h>
 #include <malloc.h>
 
+static inline void material_load(Material* mat, cgltf_primitive* src, const char* base_path, TextureCache* cache)
+{
+    memset(mat, 0, sizeof(*mat));
+
+    cgltf_material* m = src->material;
+    if (!m)
+        return;
+
+    // load core PBR
+    if (m->has_pbr_metallic_roughness)
+    {
+        mat->pbr.albedo = load_texture_view(&m->pbr_metallic_roughness.base_color_texture, base_path, cache);
+        mat->pbr.metallic_roughness = load_texture_view(&m->pbr_metallic_roughness.metallic_roughness_texture, base_path, cache);
+        memcpy(mat->pbr.albedo_factor, m->pbr_metallic_roughness.base_color_factor, sizeof(vec4));
+        mat->pbr.metallic_factor = m->pbr_metallic_roughness.metallic_factor;
+        mat->pbr.roughness_factor = m->pbr_metallic_roughness.roughness_factor;
+    }
+
+    // load normal maps
+    mat->shared.normal = load_texture_view(&m->normal_texture, base_path, cache);
+    memcpy(mat->shared.normal_scale, m->normal_texture.transform.scale, sizeof(vec2));
+
+    // load emissive maps
+    mat->shared.emissive = load_texture_view(&m->emissive_texture, base_path, cache);
+    mat->shared.emissive_strength = m->has_emissive_strength ? m->emissive_strength.emissive_strength : 1.0f;
+    memcpy(mat->shared.emissive_factor, m->emissive_factor, sizeof(vec3));
+
+    // load ao
+    mat->shared.ambient_occlusion = load_texture_view(&m->occlusion_texture, base_path, cache);
+    mat->shared.occlusion_strength= m->occlusion_texture.scale > 0.0f ? m->occlusion_texture.scale : 1.0f;
+
+    // load iridescence
+    if ((mat->has_iridescence = m->has_iridescence))
+    {
+        mat->iridescence.texture = load_texture_view(&m->iridescence.iridescence_texture, base_path, cache);
+        mat->iridescence.thickness_texture = load_texture_view(&m->iridescence.iridescence_thickness_texture, base_path, cache);
+        mat->iridescence.factor = m->iridescence.iridescence_factor;
+        mat->iridescence.ior = m->iridescence.iridescence_ior;
+        mat->iridescence.thickness_min = m->iridescence.iridescence_thickness_min;
+        mat->iridescence.thickness_max = m->iridescence.iridescence_thickness_max;
+    }
+
+    // load sheen
+    if ((mat->has_sheen = m->has_sheen))
+    {
+        mat->sheen.color_texture = load_texture_view(&m->sheen.sheen_color_texture, base_path, cache);
+        mat->sheen.roughness_texture = load_texture_view(&m->sheen.sheen_roughness_texture, base_path, cache);
+        memcpy(mat->sheen.color_factor, m->sheen.sheen_color_factor, sizeof(vec3));
+        mat->sheen.roughness_factor = m->sheen.sheen_roughness_factor;
+    }
+
+    // load clearcoat
+    if ((mat->has_clearcoat = m->has_clearcoat))
+    {
+        mat->clearcoat.texture = load_texture_view(&m->clearcoat.clearcoat_texture, base_path, cache);
+        mat->clearcoat.roughness_texture = load_texture_view(&m->clearcoat.clearcoat_roughness_texture, base_path, cache);
+        mat->clearcoat.normal_texture = load_texture_view(&m->clearcoat.clearcoat_normal_texture, base_path, cache);
+        mat->clearcoat.factor = m->clearcoat.clearcoat_factor;
+        mat->clearcoat.roughness_factor = m->clearcoat.clearcoat_roughness_factor;
+    }
+
+    // load volume
+    if ((mat->has_volume = m->has_volume))
+    {
+        mat->volume.thickness_texture = load_texture_view(&m->volume.thickness_texture, base_path, cache);
+        mat->volume.thickness_factor = m->volume.thickness_factor;
+        mat->volume.attenuation_distance = m->volume.attenuation_distance;
+        memcpy(mat->volume.attenuation_color, m->volume.attenuation_color, sizeof(vec3));
+    }
+
+    mat->double_sided = m->double_sided;
+    mat->unlit = m->unlit;
+}
+
 int primitive_load(Primitive* model_primitive, cgltf_primitive *src, const char *base_path, TextureCache* cache)
 {
     memset(model_primitive, 0, sizeof(*model_primitive));
  
     /*---- GPU DATA SEND START ----*/
-
+    clock_t gpu_time = clock();
     // flag to check correct gpu data upload
     int ok = 1;
     glGenVertexArrays(1, &model_primitive->VAO);
@@ -50,54 +124,63 @@ int primitive_load(Primitive* model_primitive, cgltf_primitive *src, const char 
     if (!ok) 
         return 0;
     /*---- GPU DATA SEND END ----*/
+    gpu_time = clock() - gpu_time;
+    log_info("primitive_load() SAYS: TOOK %.4f TO LOAD PRIMITIVE TO GPU.", (double)gpu_time / CLOCKS_PER_SEC);
 
+    clock_t texture_time = clock();
     if (!src->material) 
     {
         log_error("ERROR... primitive_load() SAYS: PRIMITIVE CONTAINS NO MATERIAL");
         return 0;
     }
 
-    if(src->material->has_pbr_metallic_roughness)
-    {  
-        // textures
-        model_primitive->albedo = albedo_texture_load(src, base_path, cache);
-        model_primitive->metallic_roughness = metallic_roughness_texture_load(src, base_path, cache);
-
-        model_primitive->albedo_factor[0] = src->material->pbr_metallic_roughness.base_color_factor[0];
-        model_primitive->albedo_factor[1] = src->material->pbr_metallic_roughness.base_color_factor[1];
-        model_primitive->albedo_factor[2] = src->material->pbr_metallic_roughness.base_color_factor[2];
-        model_primitive->albedo_factor[3] = src->material->pbr_metallic_roughness.base_color_factor[3];
-
-        model_primitive->metallic_factor = src->material->pbr_metallic_roughness.metallic_factor;
-        model_primitive->roughness_factor = src->material->pbr_metallic_roughness.roughness_factor;
-    }
-
-    if(src->material->has_emissive_strength)
-        model_primitive->emissive_strength = src->material->emissive_strength.emissive_strength;
-    else
-        model_primitive->emissive_strength = 1.0f;
-
-    if(src->material->has_iridescence)
-    {
-        model_primitive->iridescence = iridescence_texture_load(src, base_path, cache);
-        model_primitive->iridescence_thickness = iridescence_thickness_texture_load(src, base_path, cache);
-        model_primitive->iridescence_thickness_max = src->material->iridescence.iridescence_thickness_max;
-        model_primitive->iridescence_thickness_min = src->material->iridescence.iridescence_thickness_min;
-        model_primitive->iridescence_factor = src->material->iridescence.iridescence_factor;
-        model_primitive->iridescence_ior = src->material->iridescence.iridescence_ior;
-    }
-    // get primitive emissive texture
-    model_primitive->emissive = emissive_texture_load(src, base_path, cache);
-    memcpy(model_primitive->emissive_factor, src->material->emissive_factor, sizeof(vec3));
-
-    // get primitive ao texture 
-    model_primitive->ambient_occlusion = occlusion_texture_load(src, base_path, cache);
-
-    // get primitive normal texture
-    model_primitive->normal = normal_texture_load(src, base_path, cache);
-    memcpy(model_primitive->normal_scale, src->material->normal_texture.transform.scale, sizeof(vec2));
-
+    material_load(&model_primitive->material, src, base_path, cache);
+        
+    texture_time = clock() - texture_time;
+    log_info("primitive_load() SAYS: TOOK %.4f TO LOAD TEXTURES.", (double)texture_time / CLOCKS_PER_SEC);
     return 1;
+}
+
+static inline void material_free(Material* mat)
+{
+    // core
+    if (mat->pbr.albedo)
+        glDeleteTextures(1, &mat->pbr.albedo);
+    if (mat->pbr.metallic_roughness)
+        glDeleteTextures(1, &mat->pbr.metallic_roughness);
+    // shared
+    if (mat->shared.normal)
+        glDeleteTextures(1, &mat->shared.normal);
+    if (mat->shared.emissive)
+        glDeleteTextures(1, &mat->shared.emissive);
+    if (mat->shared.ambient_occlusion)
+        glDeleteTextures(1, &mat->shared.ambient_occlusion);
+    // extensions
+    if (mat->has_iridescence) 
+    {
+        if (mat->iridescence.texture)
+            glDeleteTextures(1, &mat->iridescence.texture);
+        if (mat->iridescence.thickness_texture)
+            glDeleteTextures(1, &mat->iridescence.thickness_texture);
+    }
+    if (mat->has_sheen) 
+    {
+        if (mat->sheen.color_texture)
+            glDeleteTextures(1, &mat->sheen.color_texture);
+        if (mat->sheen.roughness_texture)
+            glDeleteTextures(1, &mat->sheen.roughness_texture);
+    }
+    if (mat->has_clearcoat) 
+    {
+        if (mat->clearcoat.texture)
+            glDeleteTextures(1, &mat->clearcoat.texture);
+        if (mat->clearcoat.roughness_texture)
+            glDeleteTextures(1, &mat->clearcoat.roughness_texture);
+        if (mat->clearcoat.normal_texture)
+            glDeleteTextures(1, &mat->clearcoat.normal_texture);
+    }
+    if (mat->has_volume && mat->volume.thickness_texture)
+        glDeleteTextures(1, &mat->volume.thickness_texture);
 }
 
 void primitive_free(Primitive* model_primitive)
@@ -115,16 +198,8 @@ void primitive_free(Primitive* model_primitive)
         glDeleteBuffers(1, &model_primitive->VBO_uvs);
     if (model_primitive->EBO)           
         glDeleteBuffers(1, &model_primitive->EBO);
-    if (model_primitive->albedo)        
-        glDeleteTextures(1, &model_primitive->albedo);
-    if (model_primitive->metallic_roughness)        
-        glDeleteTextures(1, &model_primitive->metallic_roughness);
-    if (model_primitive->normal)        
-        glDeleteTextures(1, &model_primitive->normal);
-    if (model_primitive->emissive)        
-        glDeleteTextures(1, &model_primitive->emissive);
-    if (model_primitive->ambient_occlusion)        
-        glDeleteTextures(1, &model_primitive->ambient_occlusion);
+    
+    material_free(&model_primitive->material);
 
     memset(model_primitive, 0, sizeof(*model_primitive));
 }

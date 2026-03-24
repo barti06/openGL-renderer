@@ -1,4 +1,8 @@
 #include "engine.h"
+#define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
+#include <cimgui.h>
+#include <cimgui_impl.h>
+#include "ui.h"
 
 #define DEFAULT_NEARZ 0.1f
 #define DEFAULT_FARZ 1000.0f
@@ -15,7 +19,6 @@ void engine_init(Engine* engine)
     glViewport(0, 0, 1600, 900);
 	glEnable(GL_DEPTH_TEST);
 
-    glEnable(GL_CULL_FACE);
     glfwSwapInterval(1);
     engine->swap_interv = true;
 
@@ -24,6 +27,7 @@ void engine_init(Engine* engine)
 
     engine->world = world_create();
     world_new_model(engine->world, "resources/sponza/Sponza.gltf", "sponza");
+    //world_new_model(engine->world, "resources/sponzapbr.glb", "sponzapbr");
     //world_new_model(engine->world, "resources/DamagedHelmet.glb", "helm");
     //world_new_model(engine->world, "resources/ABeautifulGame.glb", "chess");
     //world_new_model(engine->world, "resources/CarConcept.glb", "car");
@@ -36,6 +40,7 @@ void engine_init(Engine* engine)
 
     engine->last_time = 0.0f; // init delta timing
     engine->canMove = false;
+    ui_init(engine->window.ptr);
 }
 
 void engine_handleInput(Engine* engine)
@@ -81,7 +86,10 @@ void engine_handleInput(Engine* engine)
     if(is_key_pressed(&engine->window, GLFW_KEY_F5))
         shader_reload_frag(&engine->shader);
     if(is_key_pressed(&engine->window, GLFW_KEY_F6))
+    {
+        shader_use(&engine->renderer.quad_shader);
         shader_reload_frag(&engine->renderer.quad_shader);
+    }
     if(is_key_pressed(&engine->window, GLFW_KEY_J))
     {
         engine->swap_interv = !engine->swap_interv;
@@ -105,7 +113,7 @@ void engine_updates(Engine* engine)
 
 void engine_draw(Engine* engine)
 {
-    renderer_draw_world(engine->world, &engine->renderer);
+    renderer_draw_world(engine->world, &engine->renderer, engine->delta_time);
 }
 
 void engine_loop(Engine* engine)
@@ -114,8 +122,6 @@ void engine_loop(Engine* engine)
     while(!glfwWindowShouldClose(engine->window.ptr))
     {
         engine_updates(engine);
-
-        log_info("fps: %.2f", 1.0 / engine->delta_time);
 
         engine_draw(engine);
 

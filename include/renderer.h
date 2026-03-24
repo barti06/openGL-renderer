@@ -14,19 +14,31 @@ typedef struct Renderer
     float nearZ;
     float farZ;
 
-    // bit of a mess for now
     GLuint fbo;
+    GLuint g_albedo; // albedo @rgb
+    GLuint g_orm; // occlusion roughness metalness
+    GLuint g_emissive; // idk if i should send emissive maps as separate or albedo so here they are
+    GLuint g_normal;
+    GLuint g_position;
+    GLuint g_depth;
+
+    GLuint geometry_query;
+    GLuint light_query;
+    float stats_timer;
+    float stats_update_interval;
+    float stats_geometry_ms;
+    float stats_light_ms;
+    float stats_fps;
+
     GLuint quad_VAO;
     GLuint quad_VBO;
-    GLuint quad_tex_color;
-    GLuint quad_tex_depth;
     Shader quad_shader;
 } Renderer;
 
 void renderer_init(Renderer* renderer, Shader* shader, 
     int viewportX, int viewportY,
     float nearZ, float farZ);
-void renderer_draw_world(World* world, Renderer* renderer);
+void renderer_draw_world(World* world, Renderer* renderer, double delta_time);
 void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY);
 
 #endif

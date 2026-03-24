@@ -4,7 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
-#include "texture.h"
+#include "texture_Loader.h"
 
 int model_load(Model* model, const char* location)
 {    
@@ -89,9 +89,12 @@ int model_load(Model* model, const char* location)
 
     TextureCache texture_cache;
     texture_cache_init(&texture_cache, 64);
+    texture_decode_all(model_data, base_path, &texture_cache);
     // iterate each node from a model
     for(uint64_t ni = 0; ni < model_data->nodes_count; ni++)
     {
+        static clock_t node_time = 0;
+        node_time = clock();
         cgltf_node* src_node = &model_data->nodes[ni];
         if(!src_node->mesh)
             continue;
@@ -102,7 +105,9 @@ int model_load(Model* model, const char* location)
         cgltf_mesh* src_mesh = src_node->mesh;
         Mesh* dest_mesh = &model->meshes[model->mesh_count];
 
+        log_info("copying transform");
         cgltf_node_transform_world(src_node, (float*)dest_mesh->transform);
+        log_info("copied transform");
 
         // count each primitive on a mesh
         uint32_t primitive_count = 0;
@@ -122,11 +127,12 @@ int model_load(Model* model, const char* location)
         // iterate each mesh
         for (uint64_t pi = 0; pi < src_mesh->primitives_count; pi++)
         {
-            
+            static clock_t primitive_time = 0;
+            primitive_time = clock();
             cgltf_primitive* src_primitive = &src_mesh->primitives[pi];
             if (src_primitive->type != cgltf_primitive_type_triangles)
                 continue;
- 
+        
             Primitive* dest_primitive = &dest_mesh->primitives[dest_mesh->primitive_count];
  
             if (!primitive_load(dest_primitive, src_primitive, base_path, &texture_cache))
@@ -135,7 +141,8 @@ int model_load(Model* model, const char* location)
                 primitive_free(dest_primitive);
                 continue;
             }
-
+            primitive_time = clock() - primitive_time;
+            log_info("TOOK %.5f TO LOAD THIS PRIMITIVE.", (double)primitive_time / CLOCKS_PER_SEC);
             dest_mesh->primitive_count++;
         }
 
@@ -147,7 +154,8 @@ int model_load(Model* model, const char* location)
         }
 
         model->mesh_count++;
-        log_info("model_load() SAYS: LOADED %u PRIMITIVE(S) FROM MESH NUMBER %u", dest_mesh->primitive_count, model->mesh_count);
+        node_time = clock() - node_time;
+        log_info("model_load() SAYS: LOADED %u PRIMITIVE(S) FROM MESH NUMBER %u IN %.4f", dest_mesh->primitive_count, model->mesh_count, (double)node_time/CLOCKS_PER_SEC);
     }
 
     cgltf_free(model_data);
@@ -198,75 +206,76 @@ void model_draw(const Model* model, Shader* shader, mat4 world_matrix)
             bool has_emissive = false;
             bool has_ao = false;
 
-            if (current_primitive->albedo)
+            if (current_primitive->material.pbr.albedo)
             {
                 glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, current_primitive->albedo);
+                glBindTexture(GL_TEXTURE_2D, current_primitive->material.pbr.albedo);
                 shader_set_int(shader, "u_albedo", 0);
                 has_albedo = true;
             }
-            if(current_primitive->metallic_roughness)
+            if(current_primitive->material.pbr.metallic_roughness)
             {
                 glActiveTexture(GL_TEXTURE1);
-                glBindTexture(GL_TEXTURE_2D, current_primitive->metallic_roughness);
+                glBindTexture(GL_TEXTURE_2D, current_primitive->material.pbr.metallic_roughness);
                 shader_set_int(shader, "u_metallic_roughness", 1);
                 has_metallic_roughness = true;
             }
-            if(current_primitive->normal)
+            if(current_primitive->material.shared.normal)
             {
                 glActiveTexture(GL_TEXTURE2);
-                glBindTexture(GL_TEXTURE_2D, current_primitive->normal);
+                glBindTexture(GL_TEXTURE_2D, current_primitive->material.shared.normal);
                 shader_set_int(shader, "u_normal", 2);
-                shader_set_vec2(shader, "u_normal_scale", current_primitive->normal_scale);
+                shader_set_vec2(shader, "u_normal_scale", current_primitive->material.shared.normal_scale);
                 has_normal = true;
             }
-            if(current_primitive->emissive)
+            if(current_primitive->material.shared.emissive)
             {
                 glActiveTexture(GL_TEXTURE3);
-                glBindTexture(GL_TEXTURE_2D, current_primitive->emissive);
+                glBindTexture(GL_TEXTURE_2D, current_primitive->material.shared.emissive);
                 shader_set_int(shader, "u_emissive", 3);
                 has_emissive = true;
             }
-            if(current_primitive->ambient_occlusion)
+            if(current_primitive->material.shared.ambient_occlusion)
             {
                 glActiveTexture(GL_TEXTURE4);
-                glBindTexture(GL_TEXTURE_2D, current_primitive->ambient_occlusion);
+                glBindTexture(GL_TEXTURE_2D, current_primitive->material.shared.ambient_occlusion);
                 shader_set_int(shader, "u_ao", 4);
-                shader_set_float(shader, "u_occlusion_strength", current_primitive->occlusion_strength);
+                shader_set_float(shader, "u_occlusion_strength", current_primitive->material.shared.occlusion_strength);
                 has_ao = true;
             }
-            if(current_primitive->iridescence)
+            if(current_primitive->material.has_iridescence)
             {
                 glActiveTexture(GL_TEXTURE5);
-                glBindTexture(GL_TEXTURE_2D, current_primitive->iridescence);
+                glBindTexture(GL_TEXTURE_2D, current_primitive->material.iridescence.texture);
                 shader_set_int(shader, "u_iridescence", 5);
                 glActiveTexture(GL_TEXTURE6);
-                glBindTexture(GL_TEXTURE_2D, current_primitive->iridescence_thickness);
+                glBindTexture(GL_TEXTURE_2D, current_primitive->material.iridescence.thickness_texture);
                 shader_set_int(shader, "u_iridescence_thickness", 6);
                 
-                shader_set_float(shader, "u_iridescence_thickness_max", current_primitive->iridescence_thickness_max);
-                shader_set_float(shader, "u_iridescence_thickness_min", current_primitive->iridescence_thickness_min);
-                shader_set_float(shader, "u_iridescence_factor", current_primitive->iridescence_factor);
-                shader_set_float(shader, "u_iridescence_ior", current_primitive->iridescence_ior);
+                shader_set_float(shader, "u_iridescence_thickness_max", current_primitive->material.iridescence.thickness_max);
+                shader_set_float(shader, "u_iridescence_thickness_min", current_primitive->material.iridescence.thickness_min);
+                shader_set_float(shader, "u_iridescence_factor", current_primitive->material.iridescence.factor);
+                shader_set_float(shader, "u_iridescence_ior", current_primitive->material.iridescence.ior);
             }
 
             shader_set_bool(shader, "u_has_albedo", has_albedo);
-            shader_set_vec4(shader, "u_albedo_factor", current_primitive->albedo_factor);
+            shader_set_vec4(shader, "u_albedo_factor", current_primitive->material.pbr.albedo_factor);
 
             shader_set_bool(shader, "u_has_metallic_roughness", has_metallic_roughness);
-            shader_set_float(shader, "u_metallic_factor", current_primitive->metallic_factor);
-            shader_set_float(shader, "u_roughness_factor", current_primitive->roughness_factor);
+            shader_set_float(shader, "u_metallic_factor", current_primitive->material.pbr.metallic_factor);
+            shader_set_float(shader, "u_roughness_factor", current_primitive->material.pbr.roughness_factor);
 
             shader_set_bool(shader, "u_has_normal", has_normal);
 
             shader_set_bool(shader, "u_has_emissive", has_emissive);
-            shader_set_float(shader, "u_emissive_strength", current_primitive->emissive_strength);
-            shader_set_vec3(shader, "u_emissive_factor", current_primitive->emissive_factor);
+            shader_set_float(shader, "u_emissive_strength", current_primitive->material.shared.emissive_strength);
+            shader_set_vec3(shader, "u_emissive_factor", current_primitive->material.shared.emissive_factor);
 
             shader_set_bool(shader, "u_has_ao", has_ao);
-            // to avoid using another bool
-            shader_set_bool(shader, "u_has_iridescence", current_primitive->iridescence_factor > 0.0f);
 
+            shader_set_bool(shader, "u_has_iridescence", current_primitive->material.has_iridescence);
+
+            shader_set_bool(shader, "u_unlit", current_primitive->material.unlit);
 
             glActiveTexture(GL_TEXTURE0);
 

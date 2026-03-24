@@ -1,9 +1,15 @@
 cmake_minimum_required(VERSION 4.0)
-project(openGL-renderer VERSION 0.01 LANGUAGES C)
+project(openGL-renderer VERSION 0.01 LANGUAGES C CXX)
 
-if(MSVC)
-    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release")
 endif()
+
+add_compile_definitions(
+    $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
+    $<$<AND:$<C_COMPILER_ID:Clang>,$<PLATFORM_ID:Windows>>:_CRT_SECURE_NO_WARNINGS>
+)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -29,8 +35,9 @@ target_sources(${PROJECT_NAME} PRIVATE
     src/primitive.c
     src/world.c
     src/entity.c
-    src/texture.c
+    src/texture_loader.c
     src/renderer.c
+    src/ui.c
 )
 
 # use std C11
@@ -71,7 +78,6 @@ add_subdirectory(lib/glfw)
 
 # include cglm
 set(CGLM_STATIC ON CACHE INTERNAL "") 
-set(CMAKE_BUILD_TYPE Debug CACHE STRING "" FORCE)
 add_subdirectory(lib/cglm)
 
 # include glad
@@ -90,6 +96,34 @@ target_include_directories(cgltf INTERFACE lib/cgltf)
 add_library(stb_image INTERFACE)
 target_include_directories(stb_image INTERFACE lib/stb)
 
+# include cimgui
+add_library(cimgui STATIC
+    lib/cimgui/cimgui.cpp
+    lib/cimgui/imgui/imgui.cpp
+    lib/cimgui/imgui/imgui_draw.cpp
+    lib/cimgui/imgui/imgui_tables.cpp
+    lib/cimgui/imgui/imgui_widgets.cpp
+    lib/cimgui/imgui/imgui_demo.cpp
+    lib/cimgui/imgui/backends/imgui_impl_glfw.cpp
+    lib/cimgui/imgui/backends/imgui_impl_opengl3.cpp
+)
+target_include_directories(cimgui PUBLIC
+    lib/cimgui
+    lib/cimgui/imgui
+    lib/cimgui/imgui/backends
+)
+target_compile_definitions(cimgui PUBLIC
+    CIMGUI_USE_GLFW
+    CIMGUI_USE_OPENGL3
+    IMGUI_IMPL_API=extern\ \"C\"
+    IMGUI_DISABLE_DEMO_WINDOWS
+)
+set_target_properties(cimgui PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+)
+target_link_libraries(cimgui PUBLIC glfw glad)
+
 # setup libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
     glfw
@@ -98,6 +132,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     log_lib
     cgltf
     stb_image
+    cimgui
     ${CMAKE_DL_LIBS}
 )
 

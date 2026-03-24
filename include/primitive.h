@@ -1,10 +1,90 @@
 #ifndef PRIMITIVE_H
 #define PRIMITIVE_H
 
+#include <stdbool.h>
+
 #include "cglm/types.h"
 #include "cgltf.h"
+#include "texture_loader.h"
 
-#include "texture.h"
+typedef struct MaterialPBR
+{
+    GLuint albedo;
+    GLuint metallic_roughness;
+
+    vec4 albedo_factor;
+    float metallic_factor;
+    float roughness_factor;
+} MaterialPBR;
+
+typedef struct MaterialShared
+{
+    GLuint normal;
+    GLuint emissive;
+    GLuint ambient_occlusion;
+
+    vec2 normal_scale;
+    float occlusion_strength;
+    vec3 emissive_factor;
+    float emissive_strength;
+} MaterialShared;
+
+typedef struct MaterialIridescence
+{
+    GLuint texture;
+    GLuint thickness_texture;
+    float factor;
+    float ior;
+    float thickness_min;
+    float thickness_max;
+} MaterialIridescence;
+
+typedef struct MaterialSheen
+{
+    GLuint color_texture;
+    GLuint roughness_texture;
+    vec3 color_factor;
+    float roughness_factor;
+} MaterialSheen;
+
+typedef struct MaterialClearcoat
+{
+    GLuint texture;
+    GLuint roughness_texture;
+    GLuint normal_texture;
+    float factor;
+    float roughness_factor;
+} MaterialClearcoat;
+
+typedef struct MaterialVolume
+{
+    GLuint  thickness_texture;
+    float thickness_factor;
+    float attenuation_distance;
+    vec3 attenuation_color;
+} MaterialVolume;
+
+typedef struct Material
+{
+    MaterialPBR pbr;
+
+    MaterialShared shared;
+
+    bool has_iridescence;
+    MaterialIridescence iridescence;
+
+    bool has_sheen;
+    MaterialSheen sheen;
+
+    bool has_clearcoat;
+    MaterialClearcoat clearcoat;
+
+    bool has_volume;
+    MaterialVolume volume;
+
+    bool double_sided;
+    bool unlit;
+} Material;
 
 typedef struct Primitive
 {
@@ -16,34 +96,12 @@ typedef struct Primitive
     GLuint VBO_tangents;
     GLuint EBO;
 
-    // textures
-    GLuint albedo;
-    GLuint metallic_roughness;
-    GLuint normal;
-    GLuint emissive;
-    GLuint ambient_occlusion;
-    GLuint iridescence;
-    GLuint iridescence_thickness;
-
-    // textures factors
-    vec4 albedo_factor;
-    float metallic_factor;
-    float roughness_factor;
-    vec2 normal_scale;
-    float occlusion_strength;
-    vec3 emissive_factor;
-    float emissive_strength;
-    float iridescence_thickness_max;
-    float iridescence_thickness_min;
-    float iridescence_factor;
-    float iridescence_ior;
-
     // num of instances to draw
     GLsizei index_count;
     GLenum  index_type;
-} Primitive;
 
-#include <stdalign.h>
+    Material material;
+} Primitive;
 
 typedef struct Mesh
 {
