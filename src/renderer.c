@@ -90,11 +90,6 @@ static inline void gbuffer_update(Renderer* renderer, int w, int h)
 {
     glBindFramebuffer(GL_FRAMEBUFFER, renderer->fbo);
 
-    // main pass albedo texture
-    glBindTexture(GL_TEXTURE_2D, renderer->g_albedo);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
     // main pass position texture
     glBindTexture(GL_TEXTURE_2D, renderer->g_position);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
@@ -105,18 +100,24 @@ static inline void gbuffer_update(Renderer* renderer, int w, int h)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
     glBindTexture(GL_TEXTURE_2D, 0);
 
+    // main pass albedo texture
+    glBindTexture(GL_TEXTURE_2D, renderer->g_albedo);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
     // main pass orm (occlusion, roughness & metalness) texture
     glBindTexture(GL_TEXTURE_2D, renderer->g_orm);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // main pass emissive textures
+    glBindTexture(GL_TEXTURE_2D, renderer->g_emissive);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     // main pass depth texture
     glBindTexture(GL_TEXTURE_2D, renderer->g_depth);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    glBindTexture(GL_TEXTURE_2D, renderer->g_emissive);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -178,9 +179,34 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
     shader_set_mat4(renderer->active_shader, "u_projection", world->camera.projection);
 
     shader_use(&renderer->quad_shader);
-    shader_set_vec3(renderer->active_shader, "u_camera_position", world->camera.position);
+    shader_set_vec3(&renderer->quad_shader, "u_camera_position", world->camera.position);
     // update the camera
     camera_update_matrices(&world->camera, renderer->viewportSize, renderer->nearZ, renderer->farZ);
+}
+const char* gbuffer_options[] = {
+    "Final",
+    "Position",
+    "Normal",
+    "Albedo",
+    "Occlusion",
+    "Roughness",
+    "Metalness",
+    "Emissive",
+    "Depth"
+};
+static inline void renderer_ui(Renderer* renderer)
+{
+    igBegin("Renderer Statistics", NULL, 0);
+    igText("FPS: %.3f", renderer->stats_fps);
+    igText("Geometry Pass: %.3f ms", renderer->stats_geometry_ms);
+    igText("Lighting Pass: %.3f ms", renderer->stats_light_ms);
+    igSeparator();
+    igCombo_Str_arr("Current gbuffer view", &renderer->gbuffer_view, gbuffer_options, 9, -1);
+    igEnd();
+
+    // send the selection to the lighting shader every frame
+    shader_use(&renderer->quad_shader);
+    shader_set_int(&renderer->quad_shader, "u_gbuffer_view", renderer->gbuffer_view);
 }
 
 void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
@@ -220,8 +246,8 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
 
     glBeginQuery(GL_TIME_ELAPSED, renderer->light_query);
     // lighting pass
-    glDisable(GL_DEPTH_TEST);
     shader_use(&renderer->quad_shader);
+    glDisable(GL_DEPTH_TEST);
     // send pos texture
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, renderer->g_position);
@@ -260,11 +286,19 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
         renderer->stats_geometry_ms = geometry_display;
         renderer->stats_light_ms    = light_display;
         renderer->stats_timer       = 0.0f;
-    }   
-    igBegin("Renderer Statistics", NULL, 0);
-    igText("FPS: %.3f", renderer->stats_fps);
-    igText("Geometry Pass: %.3f ms", renderer->stats_geometry_ms);
-    igText("Lighting Pass: %.3f ms", renderer->stats_light_ms);
-    igEnd();
+    }
+    renderer_ui(renderer);
     ui_end();
+}
+
+void renderer_gbuffer_reload(Renderer* renderer)
+{
+    shader_reload_frag(&renderer->quad_shader);
+    shader_use(&renderer->quad_shader);
+    shader_set_int(&renderer->quad_shader, "g_position", 0);
+    shader_set_int(&renderer->quad_shader, "g_normal", 1);
+    shader_set_int(&renderer->quad_shader, "g_albedo", 2);
+    shader_set_int(&renderer->quad_shader, "g_orm", 3);
+    shader_set_int(&renderer->quad_shader, "g_emissive", 4);
+    shader_set_int(&renderer->quad_shader, "g_depth", 5);
 }

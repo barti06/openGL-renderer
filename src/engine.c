@@ -86,10 +86,7 @@ void engine_handleInput(Engine* engine)
     if(is_key_pressed(&engine->window, GLFW_KEY_F5))
         shader_reload_frag(&engine->shader);
     if(is_key_pressed(&engine->window, GLFW_KEY_F6))
-    {
-        shader_use(&engine->renderer.quad_shader);
-        shader_reload_frag(&engine->renderer.quad_shader);
-    }
+        renderer_gbuffer_reload(&engine->renderer);
     if(is_key_pressed(&engine->window, GLFW_KEY_J))
     {
         engine->swap_interv = !engine->swap_interv;

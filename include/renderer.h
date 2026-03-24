@@ -30,6 +30,8 @@ typedef struct Renderer
     float stats_light_ms;
     float stats_fps;
 
+    int32_t gbuffer_view;
+
     GLuint quad_VAO;
     GLuint quad_VBO;
     Shader quad_shader;
@@ -40,5 +42,5 @@ void renderer_init(Renderer* renderer, Shader* shader,
     float nearZ, float farZ);
 void renderer_draw_world(World* world, Renderer* renderer, double delta_time);
 void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY);
-
+void renderer_gbuffer_reload(Renderer* renderer);
 #endif

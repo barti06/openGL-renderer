@@ -26,6 +26,7 @@ uniform sampler2D g_emissive;
 uniform sampler2D g_depth;
 
 uniform vec3 u_camera_position;
+uniform int u_gbuffer_view;
 
 vec3 ACESFilm(vec3 x);
 
@@ -82,6 +83,23 @@ void main()
     // tone mapping
     color = ACESFilm(color);
     color = pow(color, vec3(1.0 / 2.2));
+
+    if(u_gbuffer_view == 1)
+        color = position;
+    else if(u_gbuffer_view == 2) 
+        color = normal * 0.5 + 0.5; // remap
+    else if (u_gbuffer_view == 3)
+        color = albedo;
+    else if (u_gbuffer_view == 4)
+        color = vec3(occlusion);
+    else if (u_gbuffer_view == 5)
+        color = vec3(roughness);
+    else if (u_gbuffer_view == 6)
+        color = vec3(metalness);
+    else if (u_gbuffer_view == 7)
+        color = emissive;
+    else if (u_gbuffer_view == 8)
+        color = vec3(depth);
 
     FragColor = vec4(color, 1.0);
 } 
