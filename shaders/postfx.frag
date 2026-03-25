@@ -100,17 +100,15 @@ float vignette(vec2 x, float strength)
 
 vec3 chromatic_aberration(sampler2D tex, vec2 uv, float intensity)
 {
-    vec2 center = vec2(0.5);
-
-    vec2 direction = uv - center;
+    vec2 dist = uv - 0.5;
 
     float redOffset   =  0.009 * intensity;
     float greenOffset =  0.006 * intensity;
     float blueOffset  = -0.006 * intensity;
 
     vec3 CAvec;
-    CAvec.r = texture(tex, uv + (direction * vec2(redOffset))).r;
-    CAvec.g = texture(tex, uv + (direction * vec2(greenOffset))).g;
-    CAvec.b = texture(tex, uv + (direction * vec2(blueOffset))).b;
+    CAvec.r = texture(tex, uv - (dist * vec2(redOffset))).r;
+    CAvec.g = texture(tex, uv - (dist * vec2(greenOffset))).g;
+    CAvec.b = texture(tex, uv).b;
     return CAvec;
 }

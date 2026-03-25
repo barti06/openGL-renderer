@@ -304,7 +304,7 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glEndQuery(GL_TIME_ELAPSED);
 
-    glBeginQuery(GL_TIME_ELAPSED, renderer->light_query);
+    glBeginQuery(GL_TIME_ELAPSED, renderer->fx_query);
     // postFX pass
     glClear(GL_COLOR_BUFFER_BIT);
     shader_use(&renderer->fx_shader);
@@ -329,6 +329,7 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
         renderer->stats_fps = 1.0 / delta_time;
         renderer->stats_geometry_ms = geometry_display;
         renderer->stats_light_ms = light_display;
+        renderer->stats_fx_ms = fx_display;
         renderer->stats_timer = 0.0f;
     }
 }
