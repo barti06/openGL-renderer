@@ -3,8 +3,11 @@ layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aNormal;
 layout (location = 2) in vec2 aUv;
 layout(location = 3) in vec4 aTangent;
+layout (location = 4) in vec2 aUv2;
+
 
 out vec2 v_uv;
+out vec2 v_uv2;
 out mat3 v_TBN;
 out vec3 v_fragment_pos;
 
@@ -30,6 +33,7 @@ void main()
 
     v_TBN = mat3(T, B, N);
     v_uv = aUv;
+    v_uv2 = aUv2;
 
     gl_Position = u_projection * u_view * world_pos;
 }

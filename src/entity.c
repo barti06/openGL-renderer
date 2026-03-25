@@ -56,6 +56,15 @@ void transform_set_scale_vec3(TransformComponent *t, vec3 xyz)
     glm_vec3_copy(xyz, t->scale);
     t->dirty = true;
 }
+
+void transform_set_scale(TransformComponent* t, float scale)
+{
+    t->scale[0] = scale;
+    t->scale[1] = scale;
+    t->scale[2] = scale;
+    t->dirty = true;
+}
+
  
 void transform_update(TransformComponent *t)
 {
@@ -153,6 +162,28 @@ LightComponent light_init_directional(void)
     return l;
 }
 
+void shader_add_light(Shader* shader, LightComponent* lc, vec3 position, uint32_t index)
+{
+    char uniform_name[32];
+    switch(lc->light_type)
+    {
+        case LIGHT_TYPE_POINT:
+        snprintf(uniform_name, sizeof(uniform_name), "u_pointlights[%u].position", index);
+        shader_set_vec3(shader, uniform_name, position);
+
+        snprintf(uniform_name, sizeof(uniform_name), "u_pointlights[%u].constant", index);
+        shader_set_float(shader, uniform_name, lc->lights.point.quadratic);
+        snprintf(uniform_name, sizeof(uniform_name), "u_pointlights[%u].linear", index);
+        shader_set_float(shader, uniform_name, lc->lights.point.linear);
+
+        snprintf(uniform_name, sizeof(uniform_name), "u_pointlights[%u].diffuse", index);
+        shader_set_vec3(shader, uniform_name, lc->lights.point.diffuse);
+        break;
+        default:
+        break;
+    }
+}
+
 /*---- spotlight setters ----*/
  
 void spot_set_diffuse_3float(SpotLight *t, float x, float y, float z)
@@ -207,10 +238,10 @@ void point_set_quadratic(PointLight *t, float q)
 }
 void point_set_linear(PointLight *t, float l)
 {
-    t->linear    = l;
+    t->linear = l;
 }
 
-/*---- directional light setters*/
+/*---- directional light setters ----*/
 void directional_set_diffuse_3float(DirectionalLight *t, float x, float y, float z)
 {
     t->diffuse[0] = x;
@@ -226,9 +257,9 @@ void directional_set_diffuse_vec3(DirectionalLight *t, vec3 xyz)
 /*---- entities utilities ----*/
 void entity_init(Entity *e, EntityID id, const char *name)
 {
-    e->id             = id;
+    e->id = id;
     e->component_mask = 0;
-    strncpy(e->name, name, 63);
+    strncpy(e->name, name, ENTITY_NAME_MAX_LENGTH - 1);
     e->name[ENTITY_NAME_MAX_LENGTH - 1] = '\0';
 }
  

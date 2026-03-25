@@ -3,18 +3,19 @@
 
 #include "shader.h"
 #include "world.h"
+#include "entity.h"
 
 
 typedef struct Renderer
 {
-    // engine owns most, renderer juts uses them in a given order
+    // engine will own most shaders, renderer juts uses them in a given order
     Shader* active_shader;
 
     vec2 viewportSize;
     float nearZ;
     float farZ;
 
-    GLuint fbo;
+    GLuint gBuffer_fbo;
     GLuint g_albedo; // albedo @rgb
     GLuint g_orm; // occlusion roughness metalness
     GLuint g_emissive; // idk if i should send emissive maps as separate or albedo so here they are
@@ -22,19 +23,34 @@ typedef struct Renderer
     GLuint g_position;
     GLuint g_depth;
 
+    GLuint fx_fbo;
+    GLuint fx_scene;
+
     GLuint geometry_query;
     GLuint light_query;
+    GLuint fx_query;
+
     float stats_timer;
     float stats_update_interval;
     float stats_geometry_ms;
     float stats_light_ms;
+    float stats_fx_ms;
     float stats_fps;
 
     int32_t gbuffer_view;
+    int32_t tonemap;
+    float gamma;
+    float exposure;
+    float brightness;
+    bool vignette_enabled;
+    float vignette_strength;
+    bool CA_enabled;
+    float CA_strength;
 
     GLuint quad_VAO;
     GLuint quad_VBO;
-    Shader quad_shader;
+    Shader light_shader; 
+    Shader fx_shader;
 } Renderer;
 
 void renderer_init(Renderer* renderer, Shader* shader, 
@@ -42,5 +58,13 @@ void renderer_init(Renderer* renderer, Shader* shader,
     float nearZ, float farZ);
 void renderer_draw_world(World* world, Renderer* renderer, double delta_time);
 void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY);
+
 void renderer_gbuffer_reload(Renderer* renderer);
+// camera position is needed for lighting calculations each frame
+void renderer_gbuffer_update(Renderer* renderer, vec3 camera_pos);
+
+void renderer_get_light(Renderer* renderer, LightComponent* lc, vec3 position);
+
+void renderer_postfx_reload(Renderer* renderer);
+void renderer_postfx_update(Renderer* renderer);
 #endif

@@ -28,11 +28,16 @@ static inline void material_load(Material* mat, cgltf_primitive* src, const char
     // load emissive maps
     mat->shared.emissive = load_texture_view(&m->emissive_texture, base_path, cache);
     mat->shared.emissive_strength = m->has_emissive_strength ? m->emissive_strength.emissive_strength : 1.0f;
+    if(m->emissive_texture.texcoord)
+        mat->shared.has_emissive_texcoord = true;
     memcpy(mat->shared.emissive_factor, m->emissive_factor, sizeof(vec3));
 
     // load ao
-    mat->shared.ambient_occlusion = load_texture_view(&m->occlusion_texture, base_path, cache);
+    mat->shared.ambient_occlusion = load_texture_view(&m->occlusion_texture, base_path, cache);    
     mat->shared.occlusion_strength= m->occlusion_texture.scale > 0.0f ? m->occlusion_texture.scale : 1.0f;
+    if(m->occlusion_texture.texcoord)
+        mat->shared.has_occlusion_texcoord = true;
+    memcpy(mat->shared.occlusion_scale, m->occlusion_texture.transform.scale, sizeof(vec2));
 
     // load iridescence
     if ((mat->has_iridescence = m->has_iridescence))
@@ -82,7 +87,6 @@ int primitive_load(Primitive* model_primitive, cgltf_primitive *src, const char 
     memset(model_primitive, 0, sizeof(*model_primitive));
  
     /*---- GPU DATA SEND START ----*/
-    clock_t gpu_time = clock();
     // flag to check correct gpu data upload
     int ok = 1;
     glGenVertexArrays(1, &model_primitive->VAO);
@@ -91,6 +95,7 @@ int primitive_load(Primitive* model_primitive, cgltf_primitive *src, const char 
     glGenBuffers(1, &model_primitive->VBO_positions);
     glGenBuffers(1, &model_primitive->VBO_normals);
     glGenBuffers(1, &model_primitive->VBO_uvs);
+    glGenBuffers(1, &model_primitive->VBO_uvs2);
     glGenBuffers(1, &model_primitive->VBO_tangents);
     glGenBuffers(1, &model_primitive->EBO);
     
@@ -108,6 +113,8 @@ int primitive_load(Primitive* model_primitive, cgltf_primitive *src, const char 
         // pass primitive uvs to gpu
         else if(attribute->type == cgltf_attribute_type_texcoord && attribute->index == 0)
             ok &= upload_accessor_float(attribute->data, model_primitive->VBO_uvs, 2, 2);
+        else if(attribute->type == cgltf_attribute_type_texcoord && attribute->index == 1)
+            ok &= upload_accessor_float(attribute->data, model_primitive->VBO_uvs2, 4, 2);
         // pass primitive tangents to gpu
         else if(attribute->type == cgltf_attribute_type_tangent)
             ok &= upload_accessor_float(attribute->data, model_primitive->VBO_tangents, 3, 4);
@@ -124,10 +131,7 @@ int primitive_load(Primitive* model_primitive, cgltf_primitive *src, const char 
     if (!ok) 
         return 0;
     /*---- GPU DATA SEND END ----*/
-    gpu_time = clock() - gpu_time;
-    log_info("primitive_load() SAYS: TOOK %.4f TO LOAD PRIMITIVE TO GPU.", (double)gpu_time / CLOCKS_PER_SEC);
 
-    clock_t texture_time = clock();
     if (!src->material) 
     {
         log_error("ERROR... primitive_load() SAYS: PRIMITIVE CONTAINS NO MATERIAL");
@@ -136,8 +140,6 @@ int primitive_load(Primitive* model_primitive, cgltf_primitive *src, const char 
 
     material_load(&model_primitive->material, src, base_path, cache);
         
-    texture_time = clock() - texture_time;
-    log_info("primitive_load() SAYS: TOOK %.4f TO LOAD TEXTURES.", (double)texture_time / CLOCKS_PER_SEC);
     return 1;
 }
 
@@ -196,6 +198,8 @@ void primitive_free(Primitive* model_primitive)
         glDeleteBuffers(1, &model_primitive->VBO_normals);
     if (model_primitive->VBO_uvs)       
         glDeleteBuffers(1, &model_primitive->VBO_uvs);
+    if (model_primitive->VBO_uvs2)       
+        glDeleteBuffers(1, &model_primitive->VBO_uvs2);
     if (model_primitive->EBO)           
         glDeleteBuffers(1, &model_primitive->EBO);
     

@@ -4,7 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
-#include "texture_Loader.h"
+#include "texture_loader.h"
 
 int model_load(Model* model, const char* location)
 {    
@@ -105,9 +105,7 @@ int model_load(Model* model, const char* location)
         cgltf_mesh* src_mesh = src_node->mesh;
         Mesh* dest_mesh = &model->meshes[model->mesh_count];
 
-        log_info("copying transform");
         cgltf_node_transform_world(src_node, (float*)dest_mesh->transform);
-        log_info("copied transform");
 
         // count each primitive on a mesh
         uint32_t primitive_count = 0;
@@ -127,8 +125,6 @@ int model_load(Model* model, const char* location)
         // iterate each mesh
         for (uint64_t pi = 0; pi < src_mesh->primitives_count; pi++)
         {
-            static clock_t primitive_time = 0;
-            primitive_time = clock();
             cgltf_primitive* src_primitive = &src_mesh->primitives[pi];
             if (src_primitive->type != cgltf_primitive_type_triangles)
                 continue;
@@ -141,8 +137,6 @@ int model_load(Model* model, const char* location)
                 primitive_free(dest_primitive);
                 continue;
             }
-            primitive_time = clock() - primitive_time;
-            log_info("TOOK %.5f TO LOAD THIS PRIMITIVE.", (double)primitive_time / CLOCKS_PER_SEC);
             dest_mesh->primitive_count++;
         }
 
@@ -233,6 +227,7 @@ void model_draw(const Model* model, Shader* shader, mat4 world_matrix)
                 glActiveTexture(GL_TEXTURE3);
                 glBindTexture(GL_TEXTURE_2D, current_primitive->material.shared.emissive);
                 shader_set_int(shader, "u_emissive", 3);
+                shader_set_bool(shader, "u_has_emissive_texcoord", current_primitive->material.shared.has_emissive_texcoord);
                 has_emissive = true;
             }
             if(current_primitive->material.shared.ambient_occlusion)
@@ -241,6 +236,8 @@ void model_draw(const Model* model, Shader* shader, mat4 world_matrix)
                 glBindTexture(GL_TEXTURE_2D, current_primitive->material.shared.ambient_occlusion);
                 shader_set_int(shader, "u_ao", 4);
                 shader_set_float(shader, "u_occlusion_strength", current_primitive->material.shared.occlusion_strength);
+                shader_set_vec2(shader, "u_occlusion_scale", current_primitive->material.shared.occlusion_scale);
+                shader_set_bool(shader, "u_has_occlusion_texcoord", current_primitive->material.shared.has_occlusion_texcoord);
                 has_ao = true;
             }
             if(current_primitive->material.has_iridescence)

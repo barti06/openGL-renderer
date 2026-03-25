@@ -3,16 +3,16 @@
 
 #include "shader.h"
 #include "window.h"
-#include "camera.h"
 #include "world.h"
 #include "renderer.h"
 
 typedef struct Engine
 {
     Window window;
-    // engine just owns the shaders, does not interact with them
     Shader shader;
+    World* world;
     Renderer renderer;
+    int pointlight_count;
 
     float last_time;
     float delta_time;
@@ -21,9 +21,6 @@ typedef struct Engine
     bool swap_interv;
 
     bool canMove;
-
-    World* world;
-    
 } Engine;
 
 // init the engine

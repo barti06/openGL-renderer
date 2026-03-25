@@ -150,15 +150,13 @@ void texture_decode_all(cgltf_data* data, const char* base_path, TextureCache* c
 
     free(jobs);
     free(threads);
-
-    log_info("texture_decode_all() SAYS: UPLOADED %u TEXTURES", count);
 }
 
 GLuint load_texture_view(cgltf_texture_view* texture_view, const char* base_path, TextureCache* cache)
 {
     if(!texture_view->texture)
     {
-        log_error("ERROR... load_texture_view() SAYS: COULDN'T TEXTURE IN TEXTURE VIEW!");
+        log_error("ERROR... load_texture_view() SAYS: NO TEXTURE IN TEXTURE VIEW!");
         return 0;
     }
     cgltf_image* image = texture_view->texture->image;
@@ -168,7 +166,6 @@ GLuint load_texture_view(cgltf_texture_view* texture_view, const char* base_path
         log_error("ERROR... load_texture_view() SAYS: COULDN'T FIND IMAGE IN TEXTURE!");
         return 0;
     }
-    
     uint32_t cached_tex = texture_cache_get(cache, image);
     if(cached_tex)
         return cached_tex;

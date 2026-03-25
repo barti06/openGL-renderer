@@ -6,12 +6,10 @@
 
 World* world_create(void)
 {
-    size_t size = sizeof(World);
-    size_t padded_size = (size + 31) & ~31;
 #ifdef _WIN32
-    World* world = _aligned_malloc(padded_size, 32);
+    World* world = _aligned_malloc(sizeof(World), 32);
 #else
-    World* world = aligned_malloc(32, padded_size);
+    World* world = aligned_malloc(32, sizeof(World));
 #endif
 
     if(!world)
@@ -77,6 +75,33 @@ static inline RenderableComponent* world_add_renderable(World* world, EntityID i
     return &world->renderables[id];
 }
 
+static inline LightComponent* world_add_light(World* world, EntityID id, LightType type)
+{
+    if(id > MAX_ENTITIES - 1)
+        return NULL;
+    
+    entity_add_component(&world->entities[id], COMPONENT_LIGHT);
+
+    switch(type)
+    {
+        case LIGHT_TYPE_POINT:
+        world->lights[id] = light_init_point();
+        break;
+        case LIGHT_TYPE_SPOT:
+        world->lights[id] = light_init_spot();
+        break;
+        case LIGHT_TYPE_DIRECTIONAL:
+        world->lights[id] = light_init_directional();
+        break;
+        // default to a point light
+        default:
+        world->lights[id] = light_init_point();
+        break;
+    }
+    return &world->lights[id];
+}
+
+
 void world_update(World* world)
 {
     for(size_t index = 0; index < world->entities_count; index++)
@@ -102,6 +127,19 @@ void world_new_model(World* world, const char* path, const char* name)
     RenderableComponent* rc = world_add_renderable(world, e, m);
 
     log_info("world_new_model() SAYS: ADDED NEW MODEL ENTITY!");
+}
+
+void world_new_light(World* world, LightType type, const char* name)
+{
+    log_info("world_new_light() SAYS: ADDING NEW LIGHT ENTITY...");
+
+    EntityID e = world_create_entity(world, name);
+
+    TransformComponent* tc = world_add_transform(world, e);
+
+    LightComponent* lc = world_add_light(world, e, type);
+
+    log_info("world_new_light() SAYS: ADDED NEW LIGHT ENTITY!");
 }
 
 void world_destroy(World *world)

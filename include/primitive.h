@@ -24,9 +24,14 @@ typedef struct MaterialShared
     GLuint ambient_occlusion;
 
     vec2 normal_scale;
+
     float occlusion_strength;
+    vec2 occlusion_scale;
+    bool has_occlusion_texcoord;
+
     vec3 emissive_factor;
     float emissive_strength;
+    bool has_emissive_texcoord;
 } MaterialShared;
 
 typedef struct MaterialIridescence
@@ -92,6 +97,7 @@ typedef struct Primitive
     GLuint VAO;
     GLuint VBO_positions;
     GLuint VBO_uvs;
+    GLuint VBO_uvs2;
     GLuint VBO_normals;
     GLuint VBO_tangents;
     GLuint EBO;

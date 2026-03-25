@@ -21,6 +21,7 @@ typedef struct TransformComponent
     vec3 position;
     vec3 rotation;
     vec3 scale;
+    float scale_1d;
     bool dirty; // check if model needs update
 } TransformComponent;
  
@@ -66,10 +67,12 @@ typedef struct DirectionalLight
     vec3 diffuse;
 } DirectionalLight;
 
+// diffuse should be a member of this struct but i'm an idiot and now everything breaks if i add it :)
 typedef struct LightComponent
 {
     LightType light_type;
     float intensity;
+// this BARBARIC method of using unions should no longer be used due to the c11 switch but i'm too lazy to move the code
     union
     {
     PointLight point;
@@ -95,6 +98,7 @@ void transform_set_rotation_3float(TransformComponent* t, float x, float y, floa
 void transform_set_rotation_vec3(TransformComponent* t, vec3 xyz);
 void transform_set_scale_3float(TransformComponent* t, float x, float y, float z);
 void transform_set_scale_vec3(TransformComponent* t, vec3 xyz);
+void transform_set_scale(TransformComponent* t, float scale);
 void transform_update(TransformComponent* t);
 
 /*---- renderables utilities ----*/
@@ -130,5 +134,6 @@ void entity_init(Entity* e, EntityID id, const char* name);
 void entity_add_component(Entity* e, ComponentType type);
 void entity_remove_component(Entity* e, ComponentType type);
 bool entity_has_component(const Entity* e, ComponentType type);
+
 
 #endif
