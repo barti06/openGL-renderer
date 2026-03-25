@@ -59,6 +59,8 @@ void renderer_init(Renderer* renderer, Shader* shader,
 void renderer_draw_world(World* world, Renderer* renderer, double delta_time);
 void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY);
 
+void renderer_ui(Renderer* renderer);
+
 void renderer_gbuffer_reload(Renderer* renderer);
 // camera position is needed for lighting calculations each frame
 void renderer_gbuffer_update(Renderer* renderer, vec3 camera_pos);

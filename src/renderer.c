@@ -1,4 +1,5 @@
 #include "renderer.h"
+#include "ui.h"
 
 #define DEFAULT_TONEMAP 0 // zero is aces tonemapping
 #define DEFAULT_GAMMA 2.2f
@@ -377,4 +378,45 @@ void renderer_postfx_update(Renderer* renderer)
     shader_set_float(&renderer->fx_shader, "u_vignette_strength", renderer->vignette_strength);
     shader_set_bool(&renderer->fx_shader, "u_chromatic_aberration_enabled", renderer->CA_enabled);
     shader_set_float(&renderer->fx_shader, "u_chromatic_aberration_strength", renderer->CA_strength);
+}
+
+const char* gbuffer_options[] = {
+    "Final",
+    "Position",
+    "Normal",
+    "Albedo",
+    "Occlusion",
+    "Roughness",
+    "Metalness",
+    "Emissive",
+    "Depth"
+};
+
+const char* tonemap_options[] = {
+    "ACES",
+    "Reinhard",
+    "Filmic"
+};
+
+void renderer_ui(Renderer* renderer)
+{
+    igBegin("Renderer", NULL, 0);
+    igText("FPS: %.3f", renderer->stats_fps);
+    igText("Geometry pass: %.3f ms", renderer->stats_geometry_ms);
+    igText("Lighting pass: %.3f ms", renderer->stats_light_ms);
+    igText("Post-Processing pass: %.3f ms", renderer->stats_fx_ms);
+    igSeparator();
+    igCombo_Str_arr("Current gbuffer view", &renderer->gbuffer_view, gbuffer_options, 9, -1);
+    igSeparator();
+    igCombo_Str_arr("Current tone mapper", &renderer->tonemap, tonemap_options, 3, -1);
+    igSliderFloat("Gamma", &renderer->gamma, 0.0f, 3.0f, "%.1f", 0);
+    igSliderFloat("Exposure", &renderer->exposure, 0.0f, 2.0f, "%.1f", 0);
+    igSliderFloat("Brightness", &renderer->brightness, 0.0f, 2.0f, "%.1f", 0);
+    igCheckbox("Enable vignette", &renderer->vignette_enabled);
+    if(renderer->vignette_enabled)
+        igSliderFloat("Vignette strength", &renderer->vignette_strength, 0.0f, 2.0f, "%.1f", 0);
+    igCheckbox("Enable chromatic aberration", &renderer->CA_enabled);
+    if(renderer->CA_enabled)
+        igSliderFloat("Chromatic aberration strength", &renderer->CA_strength, 0.0f, 4.0f, "%.1f", 0);
+    igEnd();
 }

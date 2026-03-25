@@ -1,5 +1,6 @@
 #include "world.h"
 #include "entity.h"
+#include "ui.h"
 #include "model.h"
 #include <stdint.h>
 #include <string.h>
@@ -157,4 +158,135 @@ void world_destroy(World *world)
 #else
     free(world);
 #endif
+}
+
+const char* light_type_names[] = { 
+    "Point", 
+    "Spot", 
+    "Directional" 
+};
+
+void world_ui(World* world)
+{
+    igBegin("World", NULL, 0);
+    igText("Position: %.2f", world->camera.position);
+    igText("Entities: %u / %u", world->entities_count, MAX_ENTITIES);
+    igText("Models: %u / %u", world->model_count, MAX_MODELS);
+    igSeparator();
+
+    for (uint32_t i = 0; i < world->entities_count; i++)
+    {
+        Entity* entity = &world->entities[i];
+        if (!entity->active)
+            continue;
+
+        // one collapsing header per entity — use id as unique push to
+        // avoid name collisions between entities with the same name
+        igPushID_Int((int)i);
+        bool open = igCollapsingHeader_TreeNodeFlags(entity->name, 0);
+        if(open)
+        {
+            // transformation ui
+            if(entity_has_component(entity, COMPONENT_TRANSFORM))
+            {
+                TransformComponent* t = &world->transforms[i];
+                igText("Transform");
+                igIndent(8.0f);
+
+                if (igDragFloat3("Position", t->position, 0.01f, -1000.0f, 1000.0f, "%.3f", 0))
+                    t->dirty = true;
+
+                if (igDragFloat3("Rotation", t->rotation, 0.5f, -360.0f, 360.0f, "%.1f", 0))
+                    t->dirty = true;
+
+                if (igDragFloat3("Scale", t->scale, 0.01f, 0.001f, 1000.0f, "%.3f", 0))
+                    t->dirty = true;
+
+                // uniform scale convenience slider
+                igPushID_Str("uniform_scale");
+                float uniform = t->scale[0];
+                if (igDragFloat("Uniform scale", &uniform, 0.01f, 0.001f, 1000.0f, "%.3f", 0))
+                    transform_set_scale(t, uniform);
+                igPopID();
+
+                igUnindent(8.0f);
+                igSeparator();
+            }
+
+            // renderable ui
+            if (entity_has_component(entity, COMPONENT_RENDERABLE))
+            {
+                RenderableComponent* rc = &world->renderables[i];
+                igText("Renderable");
+                igIndent(8.0f);
+
+                bool visible = renderable_has_flag(rc, RENDER_FLAG_VISIBLE);
+                bool wireframe = renderable_has_flag(rc, RENDER_FLAG_WIREFRAME);
+                bool nocull = renderable_has_flag(rc, RENDER_FLAG_NOCULL);
+
+                if (igCheckbox("Visible", &visible))
+                    renderable_toggle_flag(rc, RENDER_FLAG_VISIBLE);
+                if (igCheckbox("Wireframe", &wireframe))
+                    renderable_toggle_flag(rc, RENDER_FLAG_WIREFRAME);
+                if (igCheckbox("No cull",   &nocull))
+                    renderable_toggle_flag(rc, RENDER_FLAG_NOCULL);
+
+                if (rc->model)
+                    igText("Meshes: %u  Primitives: %u", rc->model->mesh_count, rc->model->model_primitive_count);
+
+                igUnindent(8.0f);
+                igSeparator();
+            }
+
+            // light ui
+            if (entity_has_component(entity, COMPONENT_LIGHT))
+            {
+                LightComponent* lc = &world->lights[i];
+                igText("Light");
+                igIndent(8.0f);
+
+                igText("Type: %s", light_type_names[lc->light_type]);
+                igDragFloat("Intensity", &lc->intensity, 0.01f, 0.0f, 1000.0f, "%.2f", 0);
+
+                switch (lc->light_type)
+                {
+                    case LIGHT_TYPE_POINT:
+                    {
+                        PointLight* p = &lc->lights.point;
+                        igColorEdit3("Color", p->diffuse, 0);
+                        igDragFloat("Linear", &p->linear,    0.001f, 0.0f, 1.0f, "%.4f", 0);
+                        igDragFloat("Quadratic", &p->quadratic, 0.001f, 0.0f, 1.0f, "%.4f", 0);
+                        break;
+                    }
+                    case LIGHT_TYPE_SPOT:
+                    {
+                        SpotLight* sl = &lc->lights.spot;
+                        igColorEdit3("Color", sl->diffuse, 0);
+                        igDragFloat("Linear", &sl->linear,    0.001f, 0.0f,   1.0f, "%.4f", 0);
+                        igDragFloat("Quadratic", &sl->quadratic, 0.001f, 0.0f,   1.0f, "%.4f", 0);
+
+                        // display in degrees — convert back to cos on change
+                        float inner_deg = glm_deg(acosf(sl->inner_cutoff));
+                        float outer_deg = glm_deg(acosf(sl->outer_cutoff));
+                        if (igDragFloat("Inner cutoff°", &inner_deg, 0.5f, 0.0f, 90.0f, "%.1f", 0))
+                            sl->inner_cutoff = cosf(glm_rad(inner_deg));
+                        if (igDragFloat("Outer cutoff°", &outer_deg, 0.5f, 0.0f, 90.0f, "%.1f", 0))
+                            sl->outer_cutoff = cosf(glm_rad(outer_deg));
+                        break;
+                    }
+                    case LIGHT_TYPE_DIRECTIONAL:
+                    {
+                        DirectionalLight* dl = &lc->lights.directional;
+                        igColorEdit3("Color", dl->diffuse, 0);
+                        break;
+                    }
+                    default: break;
+                }
+                igUnindent(8.0f);
+            }
+        }
+
+        igPopID();
+    }
+    igEnd();
 }
