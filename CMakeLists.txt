@@ -46,8 +46,8 @@ target_compile_features(${PROJECT_NAME} PRIVATE c_std_11)
 # compiler options + optimizations 
 target_compile_options(${PROJECT_NAME} PRIVATE
     # base config
-    $<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>:-Wall -Wextra -Wpedantic>
-    $<$<COMPILE_LANG_AND_ID:C,MSVC>:/W4>
+    $<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>: -W>
+    $<$<COMPILE_LANG_AND_ID:C,MSVC>:/W1>
     
     # release optimizations
     $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>>:
@@ -147,6 +147,10 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 
 if(UNIX AND NOT APPLE)
     target_link_libraries(${PROJECT_NAME} PRIVATE m)
+endif()
+
+if(WIN32)
+    target_link_libraries(${PROJECT_NAME} PRIVATE comdlg32)
 endif()
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD

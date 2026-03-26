@@ -167,6 +167,15 @@ const char* light_type_names[] = {
     "Directional" 
 };
 
+static struct
+{
+    bool open;
+    char path[MAX_MODEL_PATH_LENGTH];
+    char name[ENTITY_NAME_MAX_LENGTH];
+    bool path_chosen;
+    char err[128];
+} add_model_s = {0};
+
 void world_ui(World* world)
 {
     igBegin("World", NULL, 0);
@@ -175,6 +184,39 @@ void world_ui(World* world)
     igText("Entities: %u / %u", world->entities_count, MAX_ENTITIES);
     igText("Models: %u / %u", world->model_count, MAX_MODELS);
     igSeparator();
+
+    // add model button
+    if(igButton("Add model", (ImVec2){0,0}))
+    {
+        add_model_s.open = true;
+        add_model_s.path[0] = '\0';
+        add_model_s.name[0] = '\0';
+        add_model_s.path_chosen = true;
+        add_model_s.err[0] = '\0';
+    }
+    if(add_model_s.open)
+        igOpenPopup_Str("Add model##popup", 0);
+
+    ImVec2 center;
+    //igGetMainViewport()->WorkSize;
+    ImGuiIO* io = igGetIO_Nil();
+    center.x = io->DisplaySize.x * 0.5f;
+    center.y = io->DisplaySize.y * 0.5f;
+    igSetNextWindowPos(center, ImGuiCond_Appearing, (ImVec2){0.5f, 0.5f});
+    igSetNextWindowSize((ImVec2){420, 0}, ImGuiCond_Appearing);
+
+    if(igBeginPopupModal("Add model##popup", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        igText("TODO: finish model loader");
+
+        if(igButton("close", (ImVec2){120, 0}))
+        {
+            add_model_s.open = false;
+            igCloseCurrentPopup();
+        }
+        
+        igEndPopup();
+    }
 
     for (uint32_t i = 0; i < world->entities_count; i++)
     {
