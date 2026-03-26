@@ -29,7 +29,7 @@ typedef enum RenderFlags
 {
     RENDER_FLAG_VISIBLE = 1 << 0,
     RENDER_FLAG_WIREFRAME = 1 << 1,
-    RENDER_FLAG_NOCULL = 1 << 2
+    RENDER_FLAG_CULL = 1 << 2
 } RenderFlags;
 
 typedef struct RenderableComponent

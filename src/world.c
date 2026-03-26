@@ -222,14 +222,14 @@ void world_ui(World* world)
 
                 bool visible = renderable_has_flag(rc, RENDER_FLAG_VISIBLE);
                 bool wireframe = renderable_has_flag(rc, RENDER_FLAG_WIREFRAME);
-                bool nocull = renderable_has_flag(rc, RENDER_FLAG_NOCULL);
+                bool culling = !renderable_has_flag(rc, RENDER_FLAG_CULL);
 
                 if (igCheckbox("Visible", &visible))
                     renderable_toggle_flag(rc, RENDER_FLAG_VISIBLE);
                 if (igCheckbox("Wireframe", &wireframe))
                     renderable_toggle_flag(rc, RENDER_FLAG_WIREFRAME);
-                if (igCheckbox("No cull",   &nocull))
-                    renderable_toggle_flag(rc, RENDER_FLAG_NOCULL);
+                if (igCheckbox("Culling",   &culling))
+                    renderable_toggle_flag(rc, RENDER_FLAG_CULL);
 
                 if (rc->model)
                     igText("Meshes: %u  Primitives: %u", rc->model->mesh_count, rc->model->model_primitive_count);

@@ -91,7 +91,9 @@ void main()
     vec3 total_light = vec3(0.0);
     for(int i = 0; i < u_pointLight_count; i++)
     {
-        total_light += get_point_light(u_pointlights[i], normal, position, view_direction, albedo, metalness, roughness, norm_dot_view);
+        point_light current_pointlight = u_pointlights[i];
+        current_pointlight.diffuse *= current_pointlight.intensity;
+        total_light += get_point_light(current_pointlight, normal, position, view_direction, albedo, metalness, roughness, norm_dot_view);
     }
     color += total_light;
 

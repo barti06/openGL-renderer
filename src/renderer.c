@@ -22,142 +22,13 @@ float quadVertices[] = {
          1.0f,  1.0f,  1.0f, 1.0f
 };
 
-static inline void gbuffer_setup(Renderer* renderer, int w, int h)
-{
-    glGenFramebuffers(1, &renderer->gBuffer_fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, renderer->gBuffer_fbo);
+static inline void gbuffer_setup(Renderer* renderer, int w, int h);
 
-    // main pass position texture
-    glGenTextures(1, &renderer->g_position);
-    glBindTexture(GL_TEXTURE_2D, renderer->g_position);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderer->g_position, 0);
-    glBindTexture(GL_TEXTURE_2D, 0);
+static inline void postFX_setup(Renderer* renderer, int w, int h);
 
-    // main pass normal texture
-    glGenTextures(1, &renderer->g_normal);
-    glBindTexture(GL_TEXTURE_2D, renderer->g_normal);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, renderer->g_normal, 0);
-    glBindTexture(GL_TEXTURE_2D, 0);
+static inline void gbuffer_update(Renderer* renderer, int w, int h);
 
-    // main pass albedo texture
-    glGenTextures(1, &renderer->g_albedo);
-    glBindTexture(GL_TEXTURE_2D, renderer->g_albedo);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, renderer->g_albedo, 0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // main pass orm (occlusion, roughness & metalness) texture
-    glGenTextures(1, &renderer->g_orm);
-    glBindTexture(GL_TEXTURE_2D, renderer->g_orm);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, renderer->g_orm, 0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // main pass emissive texture
-    glGenTextures(1, &renderer->g_emissive);
-    glBindTexture(GL_TEXTURE_2D, renderer->g_emissive);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGB, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT4, GL_TEXTURE_2D, renderer->g_emissive, 0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // main pass depth texture
-    glGenTextures(1, &renderer->g_depth);
-    glBindTexture(GL_TEXTURE_2D, renderer->g_depth);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, renderer->g_depth, 0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    GLuint attachments[5] = { 
-        GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, 
-        GL_COLOR_ATTACHMENT3, GL_COLOR_ATTACHMENT4 
-    };
-    glDrawBuffers(5, attachments);
-
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-	    log_error("ERROR... renderer_init() says: FRAMEBUFFER INCOMPLETE.\n");
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-static inline void postFX_setup(Renderer* renderer, int w, int h)
-{
-    glGenFramebuffers(1, &renderer->fx_fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, renderer->fx_fbo);
-
-    // all of gbuffer's lighting calculations
-    glGenTextures(1, &renderer->fx_scene);
-    glBindTexture(GL_TEXTURE_2D, renderer->fx_scene);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderer->fx_scene, 0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-static inline void gbuffer_update(Renderer* renderer, int w, int h)
-{
-    glBindFramebuffer(GL_FRAMEBUFFER, renderer->gBuffer_fbo);
-
-    // main pass position texture
-    glBindTexture(GL_TEXTURE_2D, renderer->g_position);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // main pass normal texture
-    glBindTexture(GL_TEXTURE_2D, renderer->g_normal);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // main pass albedo texture
-    glBindTexture(GL_TEXTURE_2D, renderer->g_albedo);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // main pass orm (occlusion, roughness & metalness) texture
-    glBindTexture(GL_TEXTURE_2D, renderer->g_orm);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // main pass emissive textures
-    glBindTexture(GL_TEXTURE_2D, renderer->g_emissive);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // main pass depth texture
-    glBindTexture(GL_TEXTURE_2D, renderer->g_depth);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-static inline void postFX_update(Renderer* renderer, int w, int h)
-{
-    glBindFramebuffer(GL_FRAMEBUFFER, renderer->fx_fbo);
-
-    // all of gbuffer's lighting calculations
-    glBindTexture(GL_TEXTURE_2D, renderer->fx_scene);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
+static inline void postFX_update(Renderer* renderer, int w, int h);
 
 void renderer_init(Renderer* renderer, Shader* shader, int viewportX,
     int viewportY, float nearZ, float farZ)
@@ -259,14 +130,14 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
         if (!renderable_has_flag(rc, RENDER_FLAG_VISIBLE))
             continue;
 
-        if (renderable_has_flag(rc, RENDER_FLAG_NOCULL))
+        if (!renderable_has_flag(rc, RENDER_FLAG_CULL))
             glDisable(GL_CULL_FACE);
         if (renderable_has_flag(rc, RENDER_FLAG_WIREFRAME))
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
         model_draw(rc->model, renderer->active_shader, world->transforms[index].world_matrix);
 
-        if (renderable_has_flag(rc, RENDER_FLAG_NOCULL))
+        if (!renderable_has_flag(rc, RENDER_FLAG_CULL))
             glEnable(GL_CULL_FACE);
         if (renderable_has_flag(rc, RENDER_FLAG_WIREFRAME))
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -407,9 +278,9 @@ void renderer_ui(Renderer* renderer)
     igText("Lighting pass: %.3f ms", renderer->stats_light_ms);
     igText("Post-Processing pass: %.3f ms", renderer->stats_fx_ms);
     igSeparator();
-    igCombo_Str_arr("Current gbuffer view", &renderer->gbuffer_view, gbuffer_options, 9, -1);
+    igCombo_Str_arr("gbuffer view", &renderer->gbuffer_view, gbuffer_options, 9, -1);
     igSeparator();
-    igCombo_Str_arr("Current tone mapper", &renderer->tonemap, tonemap_options, 3, -1);
+    igCombo_Str_arr("Tone mapper", &renderer->tonemap, tonemap_options, 3, -1);
     igSliderFloat("Gamma", &renderer->gamma, 0.0f, 3.0f, "%.1f", 0);
     igSliderFloat("Exposure", &renderer->exposure, 0.0f, 2.0f, "%.1f", 0);
     igSliderFloat("Brightness", &renderer->brightness, 0.0f, 2.0f, "%.1f", 0);
@@ -420,4 +291,141 @@ void renderer_ui(Renderer* renderer)
     if(renderer->CA_enabled)
         igSliderFloat("Chromatic aberration strength", &renderer->CA_strength, 0.0f, 4.0f, "%.1f", 0);
     igEnd();
+}
+
+static inline void gbuffer_setup(Renderer* renderer, int w, int h)
+{
+    glGenFramebuffers(1, &renderer->gBuffer_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->gBuffer_fbo);
+
+    // main pass position texture
+    glGenTextures(1, &renderer->g_position);
+    glBindTexture(GL_TEXTURE_2D, renderer->g_position);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderer->g_position, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // main pass normal texture
+    glGenTextures(1, &renderer->g_normal);
+    glBindTexture(GL_TEXTURE_2D, renderer->g_normal);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, renderer->g_normal, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // main pass albedo texture
+    glGenTextures(1, &renderer->g_albedo);
+    glBindTexture(GL_TEXTURE_2D, renderer->g_albedo);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, renderer->g_albedo, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // main pass orm (occlusion, roughness & metalness) texture
+    glGenTextures(1, &renderer->g_orm);
+    glBindTexture(GL_TEXTURE_2D, renderer->g_orm);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, renderer->g_orm, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // main pass emissive texture
+    glGenTextures(1, &renderer->g_emissive);
+    glBindTexture(GL_TEXTURE_2D, renderer->g_emissive);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGB, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT4, GL_TEXTURE_2D, renderer->g_emissive, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // main pass depth texture
+    glGenTextures(1, &renderer->g_depth);
+    glBindTexture(GL_TEXTURE_2D, renderer->g_depth);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, renderer->g_depth, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    GLuint attachments[5] = { 
+        GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, 
+        GL_COLOR_ATTACHMENT3, GL_COLOR_ATTACHMENT4 
+    };
+    glDrawBuffers(5, attachments);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+	    log_error("ERROR... renderer_init() says: FRAMEBUFFER INCOMPLETE.\n");
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+static inline void postFX_setup(Renderer* renderer, int w, int h)
+{
+    glGenFramebuffers(1, &renderer->fx_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->fx_fbo);
+
+    // all of gbuffer's lighting calculations
+    glGenTextures(1, &renderer->fx_scene);
+    glBindTexture(GL_TEXTURE_2D, renderer->fx_scene);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderer->fx_scene, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+static inline void gbuffer_update(Renderer* renderer, int w, int h)
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->gBuffer_fbo);
+
+    // main pass position texture
+    glBindTexture(GL_TEXTURE_2D, renderer->g_position);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // main pass normal texture
+    glBindTexture(GL_TEXTURE_2D, renderer->g_normal);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // main pass albedo texture
+    glBindTexture(GL_TEXTURE_2D, renderer->g_albedo);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // main pass orm (occlusion, roughness & metalness) texture
+    glBindTexture(GL_TEXTURE_2D, renderer->g_orm);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // main pass emissive textures
+    glBindTexture(GL_TEXTURE_2D, renderer->g_emissive);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // main pass depth texture
+    glBindTexture(GL_TEXTURE_2D, renderer->g_depth);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+static inline void postFX_update(Renderer* renderer, int w, int h)
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->fx_fbo);
+
+    // all of gbuffer's lighting calculations
+    glBindTexture(GL_TEXTURE_2D, renderer->fx_scene);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
