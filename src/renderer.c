@@ -281,9 +281,9 @@ void renderer_ui(Renderer* renderer)
     igText("Lighting pass: %.3f ms", renderer->stats_light_ms);
     igText("Post-Processing pass: %.3f ms", renderer->stats_fx_ms);
     igSeparator();
-    igCombo_Str_arr("GBuffer view", &renderer->gbuffer_view, gbuffer_options, sizeof(gbufferView_t), -1);
+    igCombo_Str_arr("GBuffer view", &renderer->gbuffer_view, gbuffer_options, GBUFFER_MAX, -1);
     igSeparator();
-    igCombo_Str_arr("Tone mapper", &renderer->tonemap, tonemap_options, sizeof(tonemap_t), -1);
+    igCombo_Str_arr("Tone mapper", &renderer->tonemap, tonemap_options, TONEMAP_MAX, -1);
     igSliderFloat("Gamma", &renderer->gamma, 0.0f, 3.0f, "%.1f", 0);
     igSliderFloat("Exposure", &renderer->exposure, 0.0f, 2.0f, "%.1f", 0);
     igSliderFloat("Brightness", &renderer->brightness, 0.0f, 2.0f, "%.1f", 0);

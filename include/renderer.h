@@ -9,7 +9,8 @@ typedef enum
 {
     TONEMAP_ACES,
     TONEMAP_REINHARD,
-    TONEMAP_FILMIC
+    TONEMAP_FILMIC,
+    TONEMAP_MAX
 } tonemap_t;
 
 typedef enum
@@ -22,7 +23,8 @@ typedef enum
     GBUFFER_ROUGHNESS,
     GBUFFER_METALNESS,
     GBUFFER_EMISSIVE,
-    GBUFFER_DEPTH
+    GBUFFER_DEPTH,
+    GBUFFER_MAX
 } gbufferView_t;
 
 typedef struct Renderer
