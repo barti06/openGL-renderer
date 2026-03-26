@@ -10,7 +10,7 @@ World* world_create(void)
 #ifdef _WIN32
     World* world = _aligned_malloc(sizeof(World), 32);
 #else
-    World* world = aligned_malloc(32, sizeof(World));
+    World* world = aligned_alloc(32, sizeof(World));
 #endif
 
     if(!world)

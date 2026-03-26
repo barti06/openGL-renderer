@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/bartipdl/cosas/build/cmake_install.cmake",
+		"/home/bartipdl/cosas/build/lib/glfw/cmake_install.cmake",
+		"/home/bartipdl/cosas/build/lib/glfw/src/cmake_install.cmake",
+		"/home/bartipdl/cosas/build/lib/cglm/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

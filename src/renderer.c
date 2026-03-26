@@ -181,7 +181,7 @@ void renderer_init(Renderer* renderer, Shader* shader, int viewportX,
 
     // init shaders
     shader_init(&renderer->light_shader, "shaders/gBuffer.vert", "shaders/gBuffer.frag");
-    shader_init(&renderer->fx_shader, "shaders/postFX.vert", "shaders/postFX.frag");
+    shader_init(&renderer->fx_shader, "shaders/postfx.vert", "shaders/postfx.frag");
 
     // init fbos
     gbuffer_setup(renderer, viewportX, viewportY);

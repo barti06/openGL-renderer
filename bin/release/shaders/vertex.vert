@@ -3,23 +3,24 @@ layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aNormal;
 layout (location = 2) in vec2 aUv;
 layout(location = 3) in vec4 aTangent;
+layout (location = 4) in vec2 aUv2;
+
 
 out vec2 v_uv;
+out vec2 v_uv2;
 out mat3 v_TBN;
 out vec3 v_fragment_pos;
-out vec3 v_view_direction;
 
 uniform mat4 u_model;
 uniform mat4 u_view;
 uniform mat4 u_projection;
-uniform vec3 u_camera_position;
 
 void main()
 {
     // fragment in world position and camera's view direction
     vec4 world_pos = u_model * vec4(aPos, 1.0);
     v_fragment_pos = world_pos.xyz;
-    v_view_direction = normalize(u_camera_position - v_fragment_pos);
+    
 
     // normal matrix for tbn calculation
     mat3 normal_mat = transpose(inverse(mat3(u_model)));
@@ -32,6 +33,7 @@ void main()
 
     v_TBN = mat3(T, B, N);
     v_uv = aUv;
+    v_uv2 = aUv2;
 
     gl_Position = u_projection * u_view * world_pos;
 }

@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 4.0)
 project(openGL-renderer VERSION 0.01 LANGUAGES C CXX)
 
+if(NOT CMAKE_C_COMPILER_ID STREQUAL CMAKE_CXX_COMPILER_ID)
+    message(WARNING "ERROR... C COMPILER IS ${CMAKE_C_COMPILER_ID} AND CXX COMPILER IS ${CMAKE_CXX_COMPILER_ID}.")
+endif()
+
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release")
@@ -13,16 +17,12 @@ add_compile_definitions(
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# send the openGL bins to ./bin/xxx
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG   ${CMAKE_CURRENT_SOURCE_DIR}/bin/debug)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_SOURCE_DIR}/bin/release)
-
-if(NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
-    string(TOLOWER "${CMAKE_BUILD_TYPE}" _cfg_lower)
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/bin/${_cfg_lower})
-endif()
-
 add_executable(${PROJECT_NAME} ${SOURCES})
+
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/bin/release"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${CMAKE_CURRENT_SOURCE_DIR}/bin/debug"
+)
 #my source files
 target_sources(${PROJECT_NAME} PRIVATE
     src/main.c
@@ -43,14 +43,19 @@ target_sources(${PROJECT_NAME} PRIVATE
 # use std C11
 target_compile_features(${PROJECT_NAME} PRIVATE c_std_11)
 
-# compiler flags
+# compiler options + optimizations 
 target_compile_options(${PROJECT_NAME} PRIVATE
+    # base config
+    $<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>:-Wall -Wextra -Wpedantic>
+    $<$<COMPILE_LANG_AND_ID:C,MSVC>:/W4>
     
+    # release optimizations
     $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>>:
         -O3 -march=native -ffast-math -funroll-loops -fomit-frame-pointer>
     $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,MSVC>>:
         /O2 /fp:fast /GL>
 
+    # debug anti optimizations
     $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>>:
         -g -O0 -fno-omit-frame-pointer>
     $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANG_AND_ID:C,MSVC>>:
@@ -61,9 +66,13 @@ target_link_options(${PROJECT_NAME} PRIVATE
     $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANG_AND_ID:C,MSVC>>:/DEBUG>
 )
 
-set_property(TARGET ${PROJECT_NAME} PROPERTY
-    INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE
-)
+include(CheckIPOSupported)
+check_ipo_supported(RESULT ipo_supported OUTPUT ipo_error)
+if(ipo_supported)
+    set_property(TARGET ${PROJECT_NAME} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+else()
+    message(STATUS "ERROR... INTERPROCEDULAR OPTIMIZATION NOT SUPPORTED: ${ipo_error}")
+endif()
 
 # my header files
 target_include_directories(${PROJECT_NAME} 
@@ -142,6 +151,6 @@ endif()
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_SOURCE_DIR}/shaders"
-        "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders"
+        "${CMAKE_CURRENT_SOURCE_DIR}/shaders"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders"
     )
