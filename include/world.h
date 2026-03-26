@@ -6,7 +6,7 @@
 #include <stddef.h>
 #include <assert.h>
 
-#define MAX_ENTITIES 1024
+#define MAX_ENTITIES 512
 #define MAX_MODELS 64
 
 typedef struct World
