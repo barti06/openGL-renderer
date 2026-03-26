@@ -2,7 +2,6 @@
 #include "entity.h"
 #include "ui.h"
 #include "model.h"
-#include <stdint.h>
 #include <string.h>
 
 World* world_create(void)
@@ -20,6 +19,8 @@ World* world_create(void)
     }
 
     memset(world, 0, sizeof(World));
+
+    world->camera = camera_init();
 
     world->entities_count = 0;
     return world;

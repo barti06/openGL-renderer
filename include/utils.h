@@ -7,17 +7,15 @@
 #include <stdbool.h>
 #include <log.h>
 
-typedef struct Svec2f
-{
-    float x;
-    float y;
-} Svec2f;
-
 // reads a file and stores it in a string
 static inline char* read_file(const char* path)
 {
     FILE* f = fopen(path, "rb");
-    if (!f) { log_error("Cannot open file: %s", path); return NULL; }
+    if (!f) 
+    { 
+        log_error("Cannot open file: %s", path); 
+        return NULL; 
+    }
 
     fseek(f, 0, SEEK_END);
     long size = ftell(f);

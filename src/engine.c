@@ -1,27 +1,48 @@
 #include "engine.h"
 #include "ui.h"
-
-#define DEFAULT_NEARZ 0.1f
-#define DEFAULT_FARZ 100.0f
+#include <string.h>
 
 static inline void engine_send_lights(Engine* engine);
 
-void engine_init(Engine* engine)
-{
-    init_glfw(&engine->window);
+const char *argument = "-w";
 
+void engine_init(Engine *engine, int argc, char *argv[])
+{
+    int32_t w = 0;
+    int32_t h = 0;
+
+    for(int i = 1; i < argc; i++)
+    {
+        // WHY does strcmp returns zero for matches
+        if(!strcmp(argv[i], "-w") || !strcmp(argv[i], "--width"))
+        {
+            w = atoi(argv[i + 1]);
+        }
+        if(!strcmp(argv[i], "-h") || !strcmp(argv[i], "--height"))
+        {
+            h = atoi(argv[i + 1]);
+        }
+    }
+
+    Window* win = &engine->window;
+    window_init(win, w, h);
+
+    // load glad
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
 	{
 		log_error("\nERROR... engine_init() SAYS: COULDN'T LOAD GLAD!\n");
 	}
 
-    glViewport(0, 0, 1600, 900);
-	glEnable(GL_DEPTH_TEST);
+    renderer_init(&engine->renderer, &engine->shader, win->width, win->height);
 
-    glfwSwapInterval(1);
+    engine->last_time = 0.0f; // init delta timing
+    engine->canMove = false;
+    ui_init(engine->window.ptr);
+
     engine->swap_interv = true;
+    glfwSwapInterval(engine->swap_interv);
 
-    // init shader
+    // init main geometry shader, owned by the engine
 	shader_init(&engine->shader, "shaders/vertex.vert", "shaders/fragment.frag");
 
     engine->world = world_create();
@@ -35,20 +56,12 @@ void engine_init(Engine* engine)
     //world_new_model(engine->world, "resources/DiffuseTransmissionTeacup.glb", "teacup");
     //world_new_model(engine->world, "resources/ToyCar.glb", "toycar");
     //world_new_model(engine->world, "resources/MultiUVTest.glb", "multiUVtest");
-
-    world_new_light(engine->world, LIGHT_TYPE_POINT, "myLight");
-    engine->pointlight_count = 1;
-
-    engine->world->camera = camera_init();
-    renderer_init(&engine->renderer, &engine->shader, engine->window.width, engine->window.height, DEFAULT_NEARZ, DEFAULT_FARZ);
-
-    engine->last_time = 0.0f; // init delta timing
-    engine->canMove = false;
-    ui_init(engine->window.ptr);
+    world_new_light(engine->world, LIGHT_TYPE_POINT, "point light");
 }
 
 void engine_handleInput(Engine* engine)
 {
+    // all of this should be its own function
     if(engine->canMove)
     {
         ActionType action = WALK;
@@ -73,27 +86,29 @@ void engine_handleInput(Engine* engine)
         camera_process_rotation(&engine->world->camera, engine->window.xoffset, engine->window.yoffset);
     }
 
-    if(is_key_pressed(&engine->window, GLFW_KEY_P))
+    Window *w = &engine->window;
+
+    if(is_key_pressed(w, GLFW_KEY_P))
         glfwSetWindowShouldClose(engine->window.ptr, true);
 
-    if(is_key_pressed(&engine->window, GLFW_KEY_ESCAPE))
+    if(is_key_pressed(w, GLFW_KEY_ESCAPE))
     {
         engine->canMove = !engine->canMove;
 
         if(!engine->canMove)
-            window_pause(&engine->window);
+            window_pause(w);
         else
-            window_unpause(&engine->window);
+            window_unpause(w);
     }
 
-    if(is_key_pressed(&engine->window, GLFW_KEY_F5))
+    if(is_key_pressed(w, GLFW_KEY_F5))
         shader_reload_frag(&engine->shader);
     if(is_key_pressed(&engine->window, GLFW_KEY_F6))
         renderer_gbuffer_reload(&engine->renderer);
-    if(is_key_pressed(&engine->window, GLFW_KEY_F7))
+    if(is_key_pressed(w, GLFW_KEY_F7))
         renderer_postfx_reload(&engine->renderer);
 
-    if(is_key_pressed(&engine->window, GLFW_KEY_J))
+    if(is_key_pressed(w, GLFW_KEY_J))
     {
         engine->swap_interv = !engine->swap_interv;
         glfwSwapInterval(engine->swap_interv);
@@ -155,9 +170,9 @@ void shader_update_light(Shader* shader, World* wl, int32_t index, int32_t* poin
 
         snprintf(uniform_name, sizeof(uniform_name), "u_pointlights[%u].quadratic", *point_ind);
         shader_set_float(shader, uniform_name, wl->lights[index].lights.point.quadratic);
-        snprintf(uniform_name, sizeof(uniform_name), "u_pointlights[%u].linear", index);
+        snprintf(uniform_name, sizeof(uniform_name), "u_pointlights[%u].linear", *point_ind);
         shader_set_float(shader, uniform_name, wl->lights[index].lights.point.linear);
-        snprintf(uniform_name, sizeof(uniform_name), "u_pointlights[%u].intensity", index);
+        snprintf(uniform_name, sizeof(uniform_name), "u_pointlights[%u].intensity", *point_ind);
         shader_set_float(shader, uniform_name, wl->lights[index].intensity);
 
         snprintf(uniform_name, sizeof(uniform_name), "u_pointlights[%u].diffuse", *point_ind);
@@ -172,7 +187,7 @@ void shader_update_light(Shader* shader, World* wl, int32_t index, int32_t* poin
 
         snprintf(uniform_name, sizeof(uniform_name), "u_spotlights[%u].quadratic", *spot_ind);
         shader_set_float(shader, uniform_name, wl->lights[index].lights.spot.quadratic);
-        snprintf(uniform_name, sizeof(uniform_name), "u_spotlights[%u].linear", index);
+        snprintf(uniform_name, sizeof(uniform_name), "u_spotlights[%u].linear", *spot_ind);
         shader_set_float(shader, uniform_name, wl->lights[index].lights.spot.linear);
 
         snprintf(uniform_name, sizeof(uniform_name), "u_spotlights[%u].diffuse", *spot_ind);

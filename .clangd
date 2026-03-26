@@ -1,0 +1,12 @@
+CompileFlags:
+  Add: [
+    "-std=c11",
+    "-Ilib/cglm/include",
+    "-Ilib/glfw/include",
+    "-Ilib/glad/include",
+    "-DCGLM_ALL_UNALIGNED"
+  ]
+  CompilationDatabase: "build/debug"
+Index:
+  Background: Build
+  

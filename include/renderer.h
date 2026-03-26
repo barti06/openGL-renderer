@@ -5,6 +5,25 @@
 #include "world.h"
 #include "entity.h"
 
+typedef enum
+{
+    TONEMAP_ACES,
+    TONEMAP_REINHARD,
+    TONEMAP_FILMIC
+} tonemap_t;
+
+typedef enum
+{
+    GBUFFER_FINAL,
+    GBUFFER_POSITION,
+    GBUFFER_NORMAL,
+    GBUFFER_ALBEDO,
+    GBUFFER_OCCLUSION,
+    GBUFFER_ROUGHNESS,
+    GBUFFER_METALNESS,
+    GBUFFER_EMISSIVE,
+    GBUFFER_DEPTH
+} gbufferView_t;
 
 typedef struct Renderer
 {
@@ -26,6 +45,7 @@ typedef struct Renderer
     GLuint fx_fbo;
     GLuint fx_scene;
 
+    // for gpu timing
     GLuint geometry_query;
     GLuint light_query;
     GLuint fx_query;
@@ -37,8 +57,9 @@ typedef struct Renderer
     float stats_fx_ms;
     float stats_fps;
 
-    int32_t gbuffer_view;
-    int32_t tonemap;
+    // various rendering related settings
+    gbufferView_t gbuffer_view;
+    tonemap_t tonemap;
     float gamma;
     float exposure;
     float brightness;
@@ -47,6 +68,7 @@ typedef struct Renderer
     bool CA_enabled;
     float CA_strength;
 
+    // the drawing quad + shaders
     GLuint quad_VAO;
     GLuint quad_VBO;
     Shader light_shader; 
@@ -54,8 +76,7 @@ typedef struct Renderer
 } Renderer;
 
 void renderer_init(Renderer* renderer, Shader* shader, 
-    int viewportX, int viewportY,
-    float nearZ, float farZ);
+    int viewportX, int viewportY);
 void renderer_draw_world(World* world, Renderer* renderer, double delta_time);
 void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY);
 

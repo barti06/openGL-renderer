@@ -12,7 +12,6 @@ typedef struct Engine
     Shader shader;
     World* world;
     Renderer renderer;
-    int pointlight_count;
 
     float last_time;
     float delta_time;
@@ -24,7 +23,7 @@ typedef struct Engine
 } Engine;
 
 // init the engine
-void engine_init(Engine* engine);
+void engine_init(Engine* engine, int argc, char* argv[]);
 
 // check for window key inputs
 void engine_handleInput(Engine* engine);

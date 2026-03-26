@@ -11,6 +11,9 @@
 #define DEFAULT_CA_STATE 0 // false
 #define DEFAULT_CA_STRENGTH 2.0f
 
+#define DEFAULT_NEARZ 0.1f
+#define DEFAULT_FARZ 100.0f
+
 float quadVertices[] = { 
         // positions   // texCoords
         -1.0f,  1.0f,  0.0f, 1.0f,
@@ -31,10 +34,10 @@ static inline void gbuffer_update(Renderer* renderer, int w, int h);
 static inline void postFX_update(Renderer* renderer, int w, int h);
 
 void renderer_init(Renderer* renderer, Shader* shader, int viewportX,
-    int viewportY, float nearZ, float farZ)
+    int viewportY)
 {
-    renderer->nearZ = nearZ;
-    renderer->farZ = farZ;
+    renderer->nearZ = DEFAULT_NEARZ;
+    renderer->farZ = DEFAULT_FARZ;
     renderer->viewportSize[0] = viewportX;
     renderer->viewportSize[1] = viewportY;
     renderer->active_shader = shader;
@@ -221,7 +224,7 @@ void renderer_gbuffer_update(Renderer* renderer, vec3 camera_pos)
     shader_use(&renderer->light_shader);
     // this function is not too long and probably should just say this directly on renderer update but wtv
     shader_set_vec3(&renderer->light_shader, "u_camera_position", camera_pos);
-    shader_set_int(&renderer->light_shader, "u_gbuffer_view", renderer->gbuffer_view);
+    shader_set_int(&renderer->light_shader, "u_gbuffer_view", (int32_t)renderer->gbuffer_view);
 }
 
 void renderer_postfx_reload(Renderer* renderer)
@@ -236,7 +239,7 @@ void renderer_postfx_update(Renderer* renderer)
 {
     // tonemappig updates
     shader_use(&renderer->fx_shader);
-    shader_set_int(&renderer->fx_shader, "u_tonemap", renderer->tonemap);
+    shader_set_int(&renderer->fx_shader, "u_tonemap", (int32_t)renderer->tonemap);
     shader_set_float(&renderer->fx_shader, "u_gamma", renderer->gamma);
     shader_set_float(&renderer->fx_shader, "u_exposure", renderer->exposure);
     shader_set_float(&renderer->fx_shader, "u_brightness", renderer->brightness);
@@ -278,9 +281,9 @@ void renderer_ui(Renderer* renderer)
     igText("Lighting pass: %.3f ms", renderer->stats_light_ms);
     igText("Post-Processing pass: %.3f ms", renderer->stats_fx_ms);
     igSeparator();
-    igCombo_Str_arr("gbuffer view", &renderer->gbuffer_view, gbuffer_options, 9, -1);
+    igCombo_Str_arr("GBuffer view", &renderer->gbuffer_view, gbuffer_options, sizeof(gbufferView_t), -1);
     igSeparator();
-    igCombo_Str_arr("Tone mapper", &renderer->tonemap, tonemap_options, 3, -1);
+    igCombo_Str_arr("Tone mapper", &renderer->tonemap, tonemap_options, sizeof(tonemap_t), -1);
     igSliderFloat("Gamma", &renderer->gamma, 0.0f, 3.0f, "%.1f", 0);
     igSliderFloat("Exposure", &renderer->exposure, 0.0f, 2.0f, "%.1f", 0);
     igSliderFloat("Brightness", &renderer->brightness, 0.0f, 2.0f, "%.1f", 0);

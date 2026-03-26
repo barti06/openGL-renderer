@@ -29,7 +29,7 @@ typedef struct Window
 
 } Window;
 
-void init_glfw(Window* window);
+void window_init(Window* window, int32_t w, int32_t h);
 
 void window_update(Window* window);
 

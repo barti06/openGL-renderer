@@ -6,7 +6,10 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 static void mouse_button_callback(GLFWwindow* window, int button, int action, int mods);
 static void mouse_pos_callback(GLFWwindow* window, double xposIn, double yposIn);
 
-void init_glfw(Window* window)
+#define DEFAULT_WINDOW_WIDTH 1600
+#define DEFAULT_WINDOW_HEIGHT 900
+
+void window_init(Window* window, int32_t w, int32_t h)
 {
     if (!glfwInit())
 	{
@@ -20,9 +23,21 @@ void init_glfw(Window* window)
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
+	int32_t width, height;
+	// if argument width or height was not set fallback to default 1600x900
+	if(!w || !h)
+	{
+		width = DEFAULT_WINDOW_WIDTH;
+		height = DEFAULT_WINDOW_HEIGHT;
+	}
+	else 
+	{
+		width = w;
+		height = h;
+	}
 
 	// create a GLFW window and check if it created correctly
-	window->ptr = glfwCreateWindow(1600, 900, "HOLA", NULL, NULL);
+	window->ptr = glfwCreateWindow(width, height, "HOLA", NULL, NULL);
 	if (window->ptr == NULL)
 	{
 		const char* description;
@@ -32,8 +47,8 @@ void init_glfw(Window* window)
 
 		glfwTerminate();
 	}
-    window->width = 1600;
-    window->height = 900;
+    window->width = width;
+    window->height = height;
 
     glfwMakeContextCurrent(window->ptr);
 
