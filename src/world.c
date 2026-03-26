@@ -232,8 +232,10 @@ void world_ui(World* world)
                     renderable_toggle_flag(rc, RENDER_FLAG_CULL);
 
                 if (rc->model)
+                {
                     igText("Meshes: %u  Primitives: %u", rc->model->mesh_count, rc->model->model_primitive_count);
-
+                    igText("Model path: %s", rc->model->filepath);
+                }  
                 igUnindent(8.0f);
                 igSeparator();
             }
