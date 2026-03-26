@@ -52,34 +52,34 @@ static inline Model* world_add_model(World* world, const char* path)
     return &world->models[id];
 }
 
-static inline TransformComponent* world_add_transform(World* world, EntityID id)
+static inline void world_add_transform(World* world, EntityID id)
 {
     if(id > MAX_ENTITIES - 1)
-        return NULL;
+        return;
 
     entity_add_component(&world->entities[id], COMPONENT_TRANSFORM);
 
     transform_init(&world->transforms[id]);
 
-    return &world->transforms[id];
+    return;
 }
 
-static inline RenderableComponent* world_add_renderable(World* world, EntityID id, Model* model)
+static inline void world_add_renderable(World* world, EntityID id, Model* model)
 {
     if(id > MAX_ENTITIES - 1)
-        return NULL;
+        return;
     
     entity_add_component(&world->entities[id], COMPONENT_RENDERABLE);
 
     renderable_init(&world->renderables[id], model);
 
-    return &world->renderables[id];
+    return;
 }
 
-static inline LightComponent* world_add_light(World* world, EntityID id, LightType type)
+static inline void world_add_light(World* world, EntityID id, LightType type)
 {
     if(id > MAX_ENTITIES - 1)
-        return NULL;
+        return;
     
     entity_add_component(&world->entities[id], COMPONENT_LIGHT);
 
@@ -99,7 +99,7 @@ static inline LightComponent* world_add_light(World* world, EntityID id, LightTy
         world->lights[id] = light_init_point();
         break;
     }
-    return &world->lights[id];
+    return;
 }
 
 
@@ -123,9 +123,9 @@ void world_new_model(World* world, const char* path, const char* name)
 
     EntityID e = world_create_entity(world, name);
 
-    TransformComponent* tc = world_add_transform(world, e);
+    world_add_transform(world, e);
 
-    RenderableComponent* rc = world_add_renderable(world, e, m);
+    world_add_renderable(world, e, m);
 
     log_info("world_new_model() SAYS: ADDED NEW MODEL ENTITY!");
 }
@@ -136,9 +136,9 @@ void world_new_light(World* world, LightType type, const char* name)
 
     EntityID e = world_create_entity(world, name);
 
-    TransformComponent* tc = world_add_transform(world, e);
+    world_add_transform(world, e);
 
-    LightComponent* lc = world_add_light(world, e, type);
+    world_add_light(world, e, type);
 
     log_info("world_new_light() SAYS: ADDED NEW LIGHT ENTITY!");
 }
