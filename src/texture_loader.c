@@ -156,7 +156,7 @@ GLuint load_texture_view(cgltf_texture_view* texture_view, const char* base_path
 {
     if(!texture_view->texture)
     {
-        log_error("ERROR... load_texture_view() SAYS: NO TEXTURE IN TEXTURE VIEW!");
+        //log_error("ERROR... load_texture_view() SAYS: NO TEXTURE IN TEXTURE VIEW!");
         return 0;
     }
     cgltf_image* image = texture_view->texture->image;
