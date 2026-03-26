@@ -24,7 +24,7 @@ void engine_init(Engine *engine, int argc, char *argv[])
         }
     }
 
-    Window* win = &engine->window;
+    Window *win = &engine->window;
     window_init(win, w, h);
 
     // load glad
@@ -46,9 +46,9 @@ void engine_init(Engine *engine, int argc, char *argv[])
 	shader_init(&engine->shader, "shaders/vertex.vert", "shaders/fragment.frag");
 
     engine->world = world_create();
-    world_new_model(engine->world, "resources/sponza/Sponza.gltf", "sponza");
+    //world_new_model(engine->world, "resources/sponza/Sponza.gltf", "sponza");
     //world_new_model(engine->world, "resources/sponzapbr.glb", "sponzapbr");
-    //world_new_model(engine->world, "resources/DamagedHelmet.glb", "helm");
+    world_new_model(engine->world, "resources/DamagedHelmet.glb", "helm");
     //world_new_model(engine->world, "resources/ABeautifulGame.glb", "chess");
     //world_new_model(engine->world, "resources/CarConcept.glb", "car");
     //world_new_model(engine->world, "resources/Bistro_Godot.glb", "bistro");
@@ -61,32 +61,32 @@ void engine_init(Engine *engine, int argc, char *argv[])
 
 void engine_handleInput(Engine* engine)
 {
+    Window *w = &engine->window;
+    Camera *c = &engine->world->camera;
     // all of this should be its own function
     if(engine->canMove)
     {
         ActionType action = WALK;
-        if(is_key_held(&engine->window, GLFW_KEY_LEFT_SHIFT))
+        if(is_key_held(w, GLFW_KEY_LEFT_SHIFT))
             action = SPRINT;
-        else if(is_key_held(&engine->window, GLFW_KEY_LEFT_CONTROL))
+        else if(is_key_held(w, GLFW_KEY_LEFT_CONTROL))
             action = CROUCH;
 
-        if(is_key_held(&engine->window, GLFW_KEY_W))
-            camera_process_movement(&engine->world->camera, engine->delta_time, FORWARD, action);
-        if(is_key_held(&engine->window, GLFW_KEY_A))
-            camera_process_movement(&engine->world->camera, engine->delta_time, LEFT, action);
-        if(is_key_held(&engine->window, GLFW_KEY_S))
-            camera_process_movement(&engine->world->camera, engine->delta_time, BACKWARD, action);
-        if(is_key_held(&engine->window, GLFW_KEY_D))
-            camera_process_movement(&engine->world->camera, engine->delta_time, RIGHT, action);
-        if(is_key_held(&engine->window, GLFW_KEY_SPACE))
-            camera_process_movement(&engine->world->camera, engine->delta_time, UP, action);
-        if(is_key_held(&engine->window, GLFW_KEY_LEFT_CONTROL))
-            camera_process_movement(&engine->world->camera, engine->delta_time, DOWN, action);
+        if(is_key_held(w, GLFW_KEY_W))
+            camera_process_movement(c, engine->delta_time, FORWARD, action);
+        if(is_key_held(w, GLFW_KEY_A))
+            camera_process_movement(c, engine->delta_time, LEFT, action);
+        if(is_key_held(w, GLFW_KEY_S))
+            camera_process_movement(c, engine->delta_time, BACKWARD, action);
+        if(is_key_held(w, GLFW_KEY_D))
+            camera_process_movement(c, engine->delta_time, RIGHT, action);
+        if(is_key_held(w, GLFW_KEY_SPACE))
+            camera_process_movement(c, engine->delta_time, UP, action);
+        if(is_key_held(w, GLFW_KEY_LEFT_CONTROL))
+            camera_process_movement(c, engine->delta_time, DOWN, action);
 
-        camera_process_rotation(&engine->world->camera, engine->window.xoffset, engine->window.yoffset);
+        camera_process_rotation(c, w->xoffset, w->yoffset);
     }
-
-    Window *w = &engine->window;
 
     if(is_key_pressed(w, GLFW_KEY_P))
         glfwSetWindowShouldClose(engine->window.ptr, true);

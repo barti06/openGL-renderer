@@ -33,8 +33,8 @@ Camera camera_init(void)
 
     // setup start position
     camera.position[0] = 0.0f;
-    camera.position[1] = 0.0f;
-    camera.position[2] = 3.0f;
+    camera.position[1] = 1.0f;
+    camera.position[2] = 5.0f;
 
     // setup worldUp (Y)
     camera.worldUp[0] = 0.0f;

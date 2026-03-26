@@ -170,7 +170,8 @@ const char* light_type_names[] = {
 void world_ui(World* world)
 {
     igBegin("World", NULL, 0);
-    igText("Position: %.2f", world->camera.position);
+    igText("Position:\n X=%.2f, Y=%.2f, Z=%.2f", world->camera.position[0], world->camera.position[2], world->camera.position[2]);
+    igText("Facing:\n X=%.2f, Y=%.2f, Z=%.2f", world->camera.front[0], world->camera.front[1], world->camera.front[2]);
     igText("Entities: %u / %u", world->entities_count, MAX_ENTITIES);
     igText("Models: %u / %u", world->model_count, MAX_MODELS);
     igSeparator();
