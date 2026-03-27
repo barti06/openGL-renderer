@@ -173,8 +173,15 @@ static struct
     char path[MAX_MODEL_PATH_LENGTH];
     char name[ENTITY_NAME_MAX_LENGTH];
     bool path_chosen;
-    char err[64];
 } add_model_s = {0};
+
+static struct
+{
+    bool open;
+    bool lt_chosen;
+    LightType lt;
+    char name[ENTITY_NAME_MAX_LENGTH];
+} add_light_s = {0};
 
 void world_ui(World* world)
 {
@@ -185,6 +192,12 @@ void world_ui(World* world)
     igText("Models: %u / %u", world->model_count, MAX_MODELS);
     igSeparator();
 
+    // get screen center to draw the new popup window there
+    ImVec2 center;
+    ImGuiIO* io = igGetIO_Nil();
+    center.x = io->DisplaySize.x * 0.5f;
+    center.y = io->DisplaySize.y * 0.5f;
+
     // add model button
     if(igButton("Add model", (ImVec2){0,0}))
     {
@@ -192,16 +205,10 @@ void world_ui(World* world)
         add_model_s.path[0] = '\0';
         add_model_s.name[0] = '\0';
         add_model_s.path_chosen = true;
-        add_model_s.err[0] = '\0';
     }
     if(add_model_s.open)
         igOpenPopup_Str("Add model##popup", 0);
 
-    // get screen center to draw the new popup window there
-    ImVec2 center;
-    ImGuiIO* io = igGetIO_Nil();
-    center.x = io->DisplaySize.x * 0.5f;
-    center.y = io->DisplaySize.y * 0.5f;
     igSetNextWindowPos(center, ImGuiCond_Appearing, (ImVec2){0.5f, 0.5f});
     igSetNextWindowSize((ImVec2){420, 0}, ImGuiCond_Appearing);
 
@@ -220,8 +227,9 @@ void world_ui(World* world)
             }
             else
             {
-                const char *error = "ERROR... FAILED TO LOAD FROM FILE DIALOG!";
-                strncpy(add_model_s.err, error, sizeof(add_model_s.err) - 1);
+                igPushStyleColor_Vec4(ImGuiCol_Text, (ImVec4){1.0f, 0.3f, 0.3f, 1.0f});
+                igText("ERROR... FAILED TO LOAD FROM FILE DIALOG!");
+                igPopStyleColor(1);
             }
         }
         
@@ -229,14 +237,6 @@ void world_ui(World* world)
         igSpacing();
         igText("Entity name:");
         igInputText("##entity_name", add_model_s.name, sizeof(add_model_s.name), 0, NULL, NULL);
-
-        // error handle
-        if (add_model_s.err[0] != '\0')
-        {
-            igPushStyleColor_Vec4(ImGuiCol_Text, (ImVec4){1.0f, 0.3f, 0.3f, 1.0f});
-            igText("%s", add_model_s.err);
-            igPopStyleColor(1);
-        }
 
         bool can_load = add_model_s.path_chosen && add_model_s.name[0] != '\0';
 
@@ -246,11 +246,76 @@ void world_ui(World* world)
         if(igButton("Load",(ImVec2){120, 0}))
         {
             if(world->model_count >= MAX_MODELS)
+            {
                 igText("ERROR... CAN'T LOAD MORE MODELS!");
+            }
+            else if(world->entities_count >= MAX_ENTITIES)
+            {
+                igText("ERROR... CAN'T LOAD MORE ENTITIES!");
+            }
             else
             {
                 world_new_model(world, add_model_s.path, add_model_s.name);
-                add_model_s.open = false;
+            }
+            add_model_s.open = false;
+            world->current_event = WORLD_EVENT_NONE;
+            igCloseCurrentPopup();
+        }
+
+        if(!can_load)
+            igEndDisabled();
+
+        if(igButton("Close", (ImVec2){120, 0}))
+        {
+            add_model_s.open = false;
+            world->current_event = WORLD_EVENT_NONE;
+            igCloseCurrentPopup();
+        }
+
+        igEndPopup();
+    }
+
+    // add light button
+    if(igButton("Add light", (ImVec2){0,0}))
+    {
+        add_light_s.open = true;
+        add_light_s.name[0] = '\0';
+        add_light_s.lt = LIGHT_TYPE_POINT;
+    }
+    if(add_light_s.open)
+        igOpenPopup_Str("Add light##popup", 0);
+
+    igSetNextWindowPos(center, ImGuiCond_Appearing, (ImVec2){0.5f, 0.5f});
+    igSetNextWindowSize((ImVec2){420, 0}, ImGuiCond_Appearing);
+
+    // add light popup window
+    if(igBeginPopupModal("Add light##popup", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        world->current_event = WORLD_EVENT_DISABLE_INPUT;
+        
+        // entity light type loader
+        if(igCombo_Str_arr("Light type", &add_light_s.lt, light_type_names, LIGHT_TYPE_MAX, -1))
+            add_light_s.lt_chosen = true;
+
+
+        // entity name loader
+        igSpacing();
+        igText("Entity name:");
+        igInputText("##entity_name", add_light_s.name, sizeof(add_light_s.name), 0, NULL, NULL);
+
+        bool can_load = add_light_s.lt_chosen && add_light_s.name[0] != '\0';
+
+        if (!can_load)
+            igBeginDisabled(true);
+
+        if(igButton("Load",(ImVec2){120, 0}))
+        {
+            if(world->entities_count >= MAX_ENTITIES)
+                igText("ERROR... CAN'T LOAD MORE ENTITIES!");
+            else
+            {
+                world_new_light(world, add_light_s.lt, add_light_s.name);
+                add_light_s.open = false;
                 world->current_event = WORLD_EVENT_NONE;
                 igCloseCurrentPopup();
             }
@@ -261,7 +326,7 @@ void world_ui(World* world)
 
         if(igButton("Close", (ImVec2){120, 0}))
         {
-            add_model_s.open = false;
+            add_light_s.open = false;
             world->current_event = WORLD_EVENT_NONE;
             igCloseCurrentPopup();
         }

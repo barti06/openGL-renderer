@@ -46,7 +46,6 @@ void engine_init(Engine *engine, int argc, char *argv[])
 	shader_init(&engine->shader, "shaders/vertex.vert", "shaders/fragment.frag");
 
     engine->world = world_create();
-    world_new_light(engine->world, LIGHT_TYPE_POINT, "point light");
 }
 
 void engine_handleInput(Engine* engine)
