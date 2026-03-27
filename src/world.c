@@ -207,6 +207,7 @@ void world_ui(World* world)
 
     if(igBeginPopupModal("Add model##popup", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
+        world->current_event = WORLD_EVENT_DISABLE_INPUT;
         // filepath loader
         igText("Filepath: %s", add_model_s.path_chosen ? add_model_s.path : "(none)");
         if(igButton("Browse...", (ImVec2){0,0}))
@@ -244,7 +245,15 @@ void world_ui(World* world)
 
         if(igButton("Load",(ImVec2){120, 0}))
         {
-
+            if(world->model_count >= MAX_MODELS)
+                igText("ERROR... CAN'T LOAD MORE MODELS!");
+            else
+            {
+                world_new_model(world, add_model_s.path, add_model_s.name);
+                add_model_s.open = false;
+                world->current_event = WORLD_EVENT_NONE;
+                igCloseCurrentPopup();
+            }
         }
 
         if(!can_load)
@@ -253,6 +262,7 @@ void world_ui(World* world)
         if(igButton("Close", (ImVec2){120, 0}))
         {
             add_model_s.open = false;
+            world->current_event = WORLD_EVENT_NONE;
             igCloseCurrentPopup();
         }
 

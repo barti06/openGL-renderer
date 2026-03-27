@@ -9,6 +9,13 @@
 #define MAX_ENTITIES 512
 #define MAX_MODELS 64
 
+// to add as i need
+typedef enum 
+{
+    WORLD_EVENT_DISABLE_INPUT,
+    WORLD_EVENT_NONE
+} worldEvent_t;
+
 typedef struct World
 {
     Entity entities[MAX_ENTITIES];
@@ -23,6 +30,7 @@ typedef struct World
     uint32_t model_count;
 
     Camera camera;
+    worldEvent_t current_event;
 } World;
 
 // heap allocates a world (they are very heavy to always have on stack)

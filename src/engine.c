@@ -46,21 +46,13 @@ void engine_init(Engine *engine, int argc, char *argv[])
 	shader_init(&engine->shader, "shaders/vertex.vert", "shaders/fragment.frag");
 
     engine->world = world_create();
-    //world_new_model(engine->world, "resources/sponza/Sponza.gltf", "sponza");
-    //world_new_model(engine->world, "resources/sponzapbr.glb", "sponzapbr");
-    world_new_model(engine->world, "resources/DamagedHelmet.glb", "helm");
-    //world_new_model(engine->world, "resources/ABeautifulGame.glb", "chess");
-    //world_new_model(engine->world, "resources/CarConcept.glb", "car");
-    //world_new_model(engine->world, "resources/Bistro_Godot.glb", "bistro");
-    //world_new_model(engine->world, "resources/porsche/scene.gltf", "porsche");
-    //world_new_model(engine->world, "resources/DiffuseTransmissionTeacup.glb", "teacup");
-    //world_new_model(engine->world, "resources/ToyCar.glb", "toycar");
-    //world_new_model(engine->world, "resources/MultiUVTest.glb", "multiUVtest");
     world_new_light(engine->world, LIGHT_TYPE_POINT, "point light");
 }
 
 void engine_handleInput(Engine* engine)
 {
+    if(engine->world->current_event == WORLD_EVENT_DISABLE_INPUT)
+        return;
     Window *w = &engine->window;
     Camera *c = &engine->world->camera;
     // all of this should be its own function
