@@ -197,8 +197,8 @@ void world_ui(World* world)
     if(add_model_s.open)
         igOpenPopup_Str("Add model##popup", 0);
 
+    // get screen center to draw the new popup window there
     ImVec2 center;
-    //igGetMainViewport()->WorkSize;
     ImGuiIO* io = igGetIO_Nil();
     center.x = io->DisplaySize.x * 0.5f;
     center.y = io->DisplaySize.y * 0.5f;
@@ -207,14 +207,22 @@ void world_ui(World* world)
 
     if(igBeginPopupModal("Add model##popup", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        igText("TODO: finish model loader");
+        igText("Filepath: %s", add_model_s.path_chosen ? add_model_s.path : "(none)");
+        if(igButton("Browse...", (ImVec2){0,0}))
+        {
+            char fpath[MAX_MODEL_PATH_LENGTH];
+            if(open_file_dialog(fpath, sizeof(fpath)))
+            {
+                log_info("used filepath selector");
+            }
+        }
 
         if(igButton("close", (ImVec2){120, 0}))
         {
             add_model_s.open = false;
             igCloseCurrentPopup();
         }
-        
+
         igEndPopup();
     }
 

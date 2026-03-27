@@ -19,7 +19,7 @@ static inline char* read_file(const char* path)
     FILE* f = fopen(path, "rb");
     if (!f) 
     { 
-        log_error("Cannot open file: %s", path); 
+        log_error("ERROR... read_file() SAYS: COULDNT OPEN FILE %s!", path); 
         return NULL; 
     }
 
@@ -43,18 +43,18 @@ static int open_file_dialog(char* out_path, size_t out_size)
     memset(&ofn, 0, sizeof(ofn));
     out_path[0] = '\0';
 
-    ofn.lStructSize  = sizeof(ofn);
-    ofn.hwndOwner    = NULL;
-    ofn.lpstrFilter  = "glTF Files\0*.gltf;*.glb\0All Files\0*.*\0";
-    ofn.lpstrFile    = out_path;
-    ofn.nMaxFile     = (DWORD)out_size;
-    ofn.lpstrTitle   = "Select a model";
-    ofn.Flags        = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = NULL;
+    ofn.lpstrFilter = "glTF Files\0*.gltf;*.glb\0All Files\0*.*\0";
+    ofn.lpstrFile = out_path;
+    ofn.nMaxFile = (DWORD)out_size;
+    ofn.lpstrTitle = "Select a model";
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
 
     return GetOpenFileNameA(&ofn) ? 1 : 0;
 
 #else
-    // Linux — try zenity first, fall back to kdialog
+    // zenity or kdialog
     FILE* f = popen("zenity --file-selection --file-filter='glTF files (*.gltf *.glb) | *.gltf *.glb' 2>/dev/null", "r");
     if (!f)
         f = popen("kdialog --getopenfilename . '*.gltf *.glb' 2>/dev/null", "r");

@@ -4,7 +4,7 @@
 #include <glad/glad.h>
 #include <cgltf.h>
 
-#define MAX_MODEL_PATH_LENGTH 512
+#define MAX_MODEL_PATH_LENGTH 256
 
 typedef struct TextureCacheEntry
 {
