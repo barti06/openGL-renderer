@@ -173,7 +173,7 @@ static struct
     char path[MAX_MODEL_PATH_LENGTH];
     char name[ENTITY_NAME_MAX_LENGTH];
     bool path_chosen;
-    char err[128];
+    char err[64];
 } add_model_s = {0};
 
 void world_ui(World* world)
@@ -207,17 +207,50 @@ void world_ui(World* world)
 
     if(igBeginPopupModal("Add model##popup", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
+        // filepath loader
         igText("Filepath: %s", add_model_s.path_chosen ? add_model_s.path : "(none)");
         if(igButton("Browse...", (ImVec2){0,0}))
         {
             char fpath[MAX_MODEL_PATH_LENGTH];
             if(open_file_dialog(fpath, sizeof(fpath)))
             {
-                log_info("used filepath selector");
+                strncpy(add_model_s.path, fpath, sizeof(add_model_s.path) - 1);
+                add_model_s.path_chosen = true;
+            }
+            else
+            {
+                const char *error = "ERROR... FAILED TO LOAD FROM FILE DIALOG!";
+                strncpy(add_model_s.err, error, sizeof(add_model_s.err) - 1);
             }
         }
+        
+        // entity name loader
+        igSpacing();
+        igText("Entity name:");
+        igInputText("##entity_name", add_model_s.name, sizeof(add_model_s.name), 0, NULL, NULL);
 
-        if(igButton("close", (ImVec2){120, 0}))
+        // error handle
+        if (add_model_s.err[0] != '\0')
+        {
+            igPushStyleColor_Vec4(ImGuiCol_Text, (ImVec4){1.0f, 0.3f, 0.3f, 1.0f});
+            igText("%s", add_model_s.err);
+            igPopStyleColor(1);
+        }
+
+        bool can_load = add_model_s.path_chosen && add_model_s.name[0] != '\0';
+
+        if (!can_load)
+            igBeginDisabled(true);
+
+        if(igButton("Load",(ImVec2){120, 0}))
+        {
+
+        }
+
+        if(!can_load)
+            igEndDisabled();
+
+        if(igButton("Close", (ImVec2){120, 0}))
         {
             add_model_s.open = false;
             igCloseCurrentPopup();
