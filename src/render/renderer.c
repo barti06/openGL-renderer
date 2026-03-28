@@ -24,7 +24,7 @@ static inline void gbuffer_update(Renderer* renderer, int w, int h);
 
 static inline void postFX_update(Renderer* renderer, int w, int h);
 
-static inline void renderer_model_draw(const Model* model, Shader* shader, mat4 world_matrix);
+static inline void renderer_model_draw(const Model* model, Renderer* renderer, mat4 world_matrix);
 
 static inline void renderer_get_light(Renderer* renderer, LightComponent* lc, vec3 position);
 
@@ -39,7 +39,7 @@ float quadVertices[] = {
          1.0f,  1.0f,  1.0f, 1.0f
 };
 
-void renderer_init(Renderer* renderer, Shader* shader, int viewportX,
+void renderer_init(Renderer* renderer, pipeline_t pipeline, int viewportX,
     int viewportY)
 {
     // load glad
@@ -47,12 +47,29 @@ void renderer_init(Renderer* renderer, Shader* shader, int viewportX,
 	{
 		log_error("\nERROR... engine_init() SAYS: COULDN'T LOAD GLAD!\n");
 	}
+
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
     renderer->nearZ = DEFAULT_NEARZ;
     renderer->farZ = DEFAULT_FARZ;
     renderer->viewportSize[0] = viewportX;
     renderer->viewportSize[1] = viewportY;
-    renderer->active_shader = shader;
+    // init deferred and forward shaders
+	shader_init(&renderer->deferred_shader, "shaders/deferred.vert", "shaders/deferred.frag");
+    shader_init(&renderer->forward_shader, "shaders/forward.vert", "shaders/forward.frag");
+    // set the active shader
+    switch(pipeline)
+    {
+        case PIPELINE_DEFERRED:
+        renderer->active_shader = &renderer->deferred_shader;
+        break;
+        case PIPELINE_FORWARD:
+        renderer->active_shader = &renderer->forward_shader;
+        break;
+        default:
+        break;
+    }
+    renderer->render_mode = pipeline;
 
     // generate main quad vao and vbo
     glGenVertexArrays(1, &renderer->quad_VAO);
@@ -66,14 +83,14 @@ void renderer_init(Renderer* renderer, Shader* shader, int viewportX,
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
 
     // init shaders
-    shader_init(&renderer->light_shader, "shaders/gBuffer.vert", "shaders/gBuffer.frag");
+    shader_init(&renderer->light_shader, "shaders/lighting.vert", "shaders/lighting.frag");
     shader_init(&renderer->fx_shader, "shaders/postfx.vert", "shaders/postfx.frag");
 
     // init fbos
     gbuffer_setup(renderer, viewportX, viewportY);
     postFX_setup(renderer, viewportX, viewportY);
 
-    // init light pass shader (gbuffer)
+    // init gbuffer shader vars
     shader_use(&renderer->light_shader);
     shader_set_int(&renderer->light_shader, "g_position", 0);
     shader_set_int(&renderer->light_shader, "g_normal", 1);
@@ -109,8 +126,9 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
     {
         renderer->viewportSize[0] = windowX;
         renderer->viewportSize[1] = windowY;
-        
-        gbuffer_update(renderer, renderer->viewportSize[0], renderer->viewportSize[1]);
+        if(renderer->render_mode == PIPELINE_DEFERRED)
+            gbuffer_update(renderer, renderer->viewportSize[0], renderer->viewportSize[1]);
+
         postFX_update(renderer, renderer->viewportSize[0], renderer->viewportSize[1]);
     }
 
@@ -119,7 +137,19 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
     shader_set_mat4(renderer->active_shader, "u_view", world->camera.view);
     shader_set_mat4(renderer->active_shader, "u_projection", world->camera.projection);
 
-    renderer_gbuffer_update(renderer, world->camera.position);
+    switch(renderer->render_mode)
+    {   
+        case PIPELINE_DEFERRED:
+        shader_use(&renderer->light_shader);
+        shader_set_vec3(&renderer->light_shader, "u_camera_position", world->camera.position);
+        shader_set_int(&renderer->light_shader, "u_gbuffer_view", (int32_t)renderer->gbuffer_view);
+        break;
+        case PIPELINE_FORWARD:
+        shader_use(&renderer->forward_shader);
+        shader_set_vec3(&renderer->forward_shader, "u_camera_position", world->camera.position);
+        default:
+        break;
+    }
 
     renderer_postfx_update(renderer);
     // update the camera
@@ -131,8 +161,17 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     glViewport(0, 0, renderer->viewportSize[0], renderer->viewportSize[1]);
     
     glBeginQuery(GL_TIME_ELAPSED, renderer->geometry_query);
-    // geometry pass
-    glBindFramebuffer(GL_FRAMEBUFFER, renderer->gBuffer_fbo);
+    switch(renderer->render_mode)
+    {
+        case PIPELINE_DEFERRED:
+        glBindFramebuffer(GL_FRAMEBUFFER, renderer->gBuffer_fbo);    // for geometry pass
+        break;
+        case PIPELINE_FORWARD:
+        glBindFramebuffer(GL_FRAMEBUFFER, renderer->fx_fbo);
+        break;
+        default:
+        break;
+    }
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     for(size_t index = 0; index < world->entities_count; index++)
@@ -145,54 +184,63 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
         if (!renderable_has_flag(rc, RENDER_FLAG_VISIBLE))
             continue;
 
-        if (!renderable_has_flag(rc, RENDER_FLAG_CULL))
+        if(!renderable_has_flag(rc, RENDER_FLAG_CULL))
             glDisable(GL_CULL_FACE);
-        if (renderable_has_flag(rc, RENDER_FLAG_WIREFRAME))
+        if(renderable_has_flag(rc, RENDER_FLAG_WIREFRAME))
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        if(renderable_has_flag(rc, RENDER_FLAG_BLEND))
+            glEnable(GL_BLEND);
 
-        renderer_model_draw(rc->model, renderer->active_shader, world->transforms[index].world_matrix);
+        renderer_model_draw(rc->model, renderer, world->transforms[index].world_matrix);
 
         if (!renderable_has_flag(rc, RENDER_FLAG_CULL))
             glEnable(GL_CULL_FACE);
         if (renderable_has_flag(rc, RENDER_FLAG_WIREFRAME))
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        if(renderable_has_flag(rc, RENDER_FLAG_BLEND))
+            glDisable(GL_BLEND);
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glEndQuery(GL_TIME_ELAPSED);
 
     glBeginQuery(GL_TIME_ELAPSED, renderer->light_query);
-    // light pass
-    glBindFramebuffer(GL_FRAMEBUFFER, renderer->fx_fbo);
-    shader_use(&renderer->light_shader);
-    glDisable(GL_DEPTH_TEST);
-    glClear(GL_COLOR_BUFFER_BIT);
-    // send pos texture
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, renderer->g_position);
-    // send normal texture
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, renderer->g_normal);
-    // send albedo texture
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, renderer->g_albedo);
-    // send orm texture
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, renderer->g_orm);
-    // send emissive texture
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, renderer->g_emissive);
-    // send depth texture
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, renderer->g_depth);
-    // render light pass to a quad
-    glBindVertexArray(renderer->quad_VAO);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    if(renderer->render_mode == PIPELINE_DEFERRED)
+    {
+        // light pass
+        glBindFramebuffer(GL_FRAMEBUFFER, renderer->fx_fbo);
+        shader_use(&renderer->light_shader);
+        glDisable(GL_DEPTH_TEST);
+        glClear(GL_COLOR_BUFFER_BIT);
+        // send pos texture
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, renderer->g_position);
+        // send normal texture
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, renderer->g_normal);
+        // send albedo texture
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, renderer->g_albedo);
+        // send ormt texture
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, renderer->g_orm);
+        // send emissive texture
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, renderer->g_emissive);
+        // send depth texture
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_2D, renderer->g_depth);
+        // render light pass to a quad
+        glBindVertexArray(renderer->quad_VAO);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glEnable(GL_DEPTH_TEST);
+    }
     glEndQuery(GL_TIME_ELAPSED);
 
     glBeginQuery(GL_TIME_ELAPSED, renderer->fx_query);
     // postFX pass
     glClear(GL_COLOR_BUFFER_BIT);
+    glDisable(GL_DEPTH_TEST);
     shader_use(&renderer->fx_shader);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, renderer->fx_scene);
@@ -285,6 +333,11 @@ const char* tonemap_options[] = {
     "Filmic"
 };
 
+const char* rendering_pipelines[] = {
+    "Forward",
+    "Deferred"
+};
+
 void renderer_ui(Renderer* renderer)
 {
     igBegin("Renderer", NULL, 0);
@@ -294,10 +347,11 @@ void renderer_ui(Renderer* renderer)
     igText("Post-Processing pass: %.3f ms", renderer->stats_fx_ms);
     igSeparator();
 
-    bool gbuffer_open = igCollapsingHeader_TreeNodeFlags("GBuffer", 0);
-    if(gbuffer_open)
+    bool pipeline_open = igCollapsingHeader_TreeNodeFlags("Pipeline", 0);
+    if(pipeline_open)
     {
-        igCombo_Str_arr("GBuffer view", &renderer->gbuffer_view, gbuffer_options, GBUFFER_MAX, -1);
+        if(renderer->render_mode == PIPELINE_DEFERRED)
+            igCombo_Str_arr("GBuffer view", &renderer->gbuffer_view, gbuffer_options, GBUFFER_MAX, -1);
         igSeparator();
     }
 
@@ -378,11 +432,11 @@ static inline void gbuffer_setup(Renderer* renderer, int w, int h)
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, renderer->g_depth, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    GLuint attachments[5] = { 
+    GLuint attachments[] = { 
         GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, 
         GL_COLOR_ATTACHMENT3, GL_COLOR_ATTACHMENT4 
     };
-    glDrawBuffers(5, attachments);
+    glDrawBuffers((sizeof(attachments) / sizeof(GLuint)), attachments);
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 	    log_error("ERROR... renderer_init() says: FRAMEBUFFER INCOMPLETE.\n");
@@ -402,6 +456,14 @@ static inline void postFX_setup(Renderer* renderer, int w, int h)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderer->fx_scene, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glGenTextures(1, &renderer->g_depth);
+    glBindTexture(GL_TEXTURE_2D, renderer->g_depth);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, renderer->g_depth, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -456,10 +518,13 @@ static inline void postFX_update(Renderer* renderer, int w, int h)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-static inline void renderer_model_draw(const Model* model, Shader* shader, mat4 world_matrix)
+static inline void renderer_model_draw(const Model* model, Renderer* renderer, mat4 world_matrix)
 {
     if (!model || !model->is_loaded || !model->meshes)
         return;
+
+    Shader* shader = renderer->active_shader;
+
     // activate the shader
     shader_use(shader);
 
@@ -478,7 +543,7 @@ static inline void renderer_model_draw(const Model* model, Shader* shader, mat4 
         for(uint32_t pi = 0; pi < mesh->primitive_count; pi++)
         {
             const Primitive* current_primitive = &mesh->primitives[pi];
-
+            
             bool has_albedo = false;
             bool has_metallic_roughness = false;
             bool has_normal = false;
@@ -539,6 +604,15 @@ static inline void renderer_model_draw(const Model* model, Shader* shader, mat4 
                 shader_set_float(shader, "u_iridescence_factor", current_primitive->material.iridescence.factor);
                 shader_set_float(shader, "u_iridescence_ior", current_primitive->material.iridescence.ior);
             }
+            if(current_primitive->material.has_volume)
+            {
+                glActiveTexture(GL_TEXTURE7);
+                glBindTexture(GL_TEXTURE_2D, current_primitive->material.volume.thickness_texture);
+                shader_set_int(shader, "u_volume_thickness", 7);
+                shader_set_float(shader, "u_volume_thickness_factor", current_primitive->material.volume.thickness_factor);
+                shader_set_float(shader, "u_volume_attenuation_distance", current_primitive->material.volume.attenuation_distance);
+                shader_set_vec3(shader, "u_volume_attenuation_color", current_primitive->material.volume.attenuation_color);
+            }
 
             shader_set_bool(shader, "u_has_albedo", has_albedo);
             shader_set_vec4(shader, "u_albedo_factor", current_primitive->material.pbr.albedo_factor);
@@ -556,7 +630,7 @@ static inline void renderer_model_draw(const Model* model, Shader* shader, mat4 
             shader_set_bool(shader, "u_has_ao", has_ao);
 
             shader_set_bool(shader, "u_has_iridescence", current_primitive->material.has_iridescence);
-
+            shader_set_bool(shader, "u_has_volume", current_primitive->material.has_volume);
             shader_set_bool(shader, "u_unlit", current_primitive->material.unlit);
 
             glActiveTexture(GL_TEXTURE0);

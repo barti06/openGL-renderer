@@ -73,12 +73,13 @@ void main()
 
     vec3 albedo = texture(g_albedo, v_uv).rgb;
 
-    vec3 orm = texture(g_orm, v_uv).rgb;
-    float occlusion = orm.r;
-    float roughness = orm.g;
-    float metalness = orm.b;
+    vec4 ormt = texture(g_orm, v_uv);
+    float occlusion = ormt.r;
+    float roughness = ormt.g;
+    float metalness = ormt.b;
 
     vec3 emissive = texture(g_emissive, v_uv).rgb;
+
 
     float depth = texture(g_depth, v_uv).r;
 
@@ -88,6 +89,7 @@ void main()
     vec3 color = vec3(0.0);
     color += emissive;
 
+    // lighting calculations
     vec3 total_light = vec3(0.0);
     for(int i = 0; i < u_pointLight_count; i++)
     {
@@ -95,12 +97,12 @@ void main()
         current_pointlight.diffuse *= current_pointlight.intensity;
         total_light += get_point_light(current_pointlight, normal, position, view_direction, albedo, metalness, roughness, norm_dot_view);
     }
-    color += total_light;
-
     vec3 ambient = vec3(0.1) * albedo;
-    color += ambient;
     if(occlusion > 0.0)
-    color *= occlusion;
+        ambient *= occlusion;
+    total_light += ambient;
+
+    color += total_light;
 
 
     if(u_gbuffer_view == 1)
@@ -125,9 +127,9 @@ void main()
 
 float D_GGX(float NdotH, float roughness)
 {
-    float a  = roughness * roughness;
+    float a = roughness * roughness;
     float a2 = a * a;
-    float d  = NdotH * NdotH * (a2 - 1.0) + 1.0;
+    float d = NdotH * NdotH * (a2 - 1.0) + 1.0;
     return a2 / (PI * d * d + 1e-7);
 }
 
@@ -153,22 +155,22 @@ vec3 PBR(vec3 N, vec3 V, vec3 L,
          vec3 albedo, float metallic, float roughness,
          vec3 radiance, float NdotV)
 {
-    vec3  H     = normalize(L + V);
+    vec3 H = normalize(L + V);
     float NdotL = max(dot(N, L), 0.0);
     float NdotH = max(dot(N, H), 0.0);
     float HdotV = max(dot(H, V), 0.0);
 
     // F0: 0.04 for dielectrics, albedo for metals
-    vec3  F0  = mix(vec3(0.04), albedo, metallic);
-    float D   = D_GGX(NdotH, roughness);
-    float G   = G_Smith(NdotV, NdotL, roughness);
-    vec3  F   = F_Schlick(HdotV, F0);
+    vec3 F0 = mix(vec3(0.04), albedo, metallic);
+    float D = D_GGX(NdotH, roughness);
+    float G = G_Smith(NdotV, NdotL, roughness);
+    vec3 F = F_Schlick(HdotV, F0);
 
     // specularity
     vec3 spec = (D * G * F) / (4.0 * NdotV * NdotL + 1e-4);
 
     // diffuse
-    vec3 kD   = (1.0 - F) * (1.0 - metallic);
+    vec3 kD = (1.0 - F) * (1.0 - metallic);
     vec3 diff = kD * albedo / PI;
 
     return (diff + spec) * radiance * NdotL;
@@ -176,12 +178,12 @@ vec3 PBR(vec3 N, vec3 V, vec3 L,
 
 vec3 get_point_light(point_light light, vec3 N, vec3 fragPos, vec3 V, vec3 albedo, float metallic, float roughness, float NdotV)
 {
-    vec3  toLight = light.position - fragPos;
-    float dist    = length(toLight);
-    vec3  L       = toLight / dist;
+    vec3 toLight = light.position - fragPos;
+    float dist = length(toLight);
+    vec3 L = toLight / dist;
 
-    float atten   = 1.0 / (1.0 + light.linear * dist + light.quadratic * dist * dist);
-    vec3  radiance = light.diffuse * atten;
+    float atten = 1.0 / (1.0 + light.linear * dist + light.quadratic * dist * dist);
+    vec3 radiance = light.diffuse * atten;
 
     return PBR(N, V, L, albedo, metallic, roughness, radiance, NdotV);
 }

@@ -92,8 +92,6 @@ int model_load(Model* model, const char* location)
     // iterate each node from a model
     for(uint64_t ni = 0; ni < model_data->nodes_count; ni++)
     {
-        static clock_t node_time = 0;
-        node_time = clock();
         cgltf_node* src_node = &model_data->nodes[ni];
         if(!src_node->mesh)
             continue;
@@ -147,8 +145,6 @@ int model_load(Model* model, const char* location)
         }
 
         model->mesh_count++;
-        node_time = clock() - node_time;
-        log_info("model_load() SAYS: LOADED %u PRIMITIVE(S) FROM MESH NUMBER %u IN %.4f", dest_mesh->primitive_count, model->mesh_count, (double)node_time/CLOCKS_PER_SEC);
     }
 
     cgltf_free(model_data);

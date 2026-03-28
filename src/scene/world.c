@@ -30,6 +30,7 @@ World* world_create(void)
     memset(world, 0, sizeof(World));
 
     world->camera = camera_init();
+    world->current_event = WORLD_EVENT_NONE;
 
     world->entities_count = 0;
     return world;

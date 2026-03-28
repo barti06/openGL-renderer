@@ -18,24 +18,25 @@ void engine_init(Engine *engine, int argc, char *argv[])
 {
     int32_t w = 0;
     int32_t h = 0;
+    pipeline_t pipeline = PIPELINE_FORWARD;
 
     for(int i = 1; i < argc; i++)
     {
         // WHY does strcmp returns zero for matches
         if(!strcmp(argv[i], "-w") || !strcmp(argv[i], "--width"))
-        {
             w = atoi(argv[i + 1]);
-        }
         if(!strcmp(argv[i], "-h") || !strcmp(argv[i], "--height"))
-        {
             h = atoi(argv[i + 1]);
-        }
+        if(!strcmp(argv[i], "-f") || !strcmp(argv[i], "--forward"))
+            continue;
+        if(!strcmp(argv[i], "-d") || !strcmp(argv[i], "--deferred"))
+            pipeline = PIPELINE_DEFERRED;
     }
 
     Window *win = &engine->window;
     window_init(win, w, h);
 
-    renderer_init(&engine->renderer, &engine->shader, win->width, win->height);
+    renderer_init(&engine->renderer, pipeline, win->width, win->height);
 
     engine->last_time = 0.0f; // init delta timing
     engine->canMove = false;
@@ -43,9 +44,6 @@ void engine_init(Engine *engine, int argc, char *argv[])
 
     engine->swap_interv = true;
     glfwSwapInterval(engine->swap_interv);
-
-    // init main geometry shader, owned by the engine
-	shader_init(&engine->shader, "shaders/vertex.vert", "shaders/fragment.frag");
 
     engine->world = world_create();
 }
@@ -114,7 +112,7 @@ static inline void engine_handleInput(Engine* engine)
     }
 
     if(is_key_pressed(w, GLFW_KEY_F5))
-        shader_reload_frag(&engine->shader);
+        shader_reload_frag(engine->renderer.active_shader);
     if(is_key_pressed(&engine->window, GLFW_KEY_F6))
         renderer_gbuffer_reload(&engine->renderer);
     if(is_key_pressed(w, GLFW_KEY_F7))
@@ -197,7 +195,17 @@ static inline void engine_send_lights(Engine* engine)
 {
     int32_t point_index = 0;
     int32_t spot_index = 0;
+    switch(engine->renderer.render_mode)
+    {
+    case PIPELINE_DEFERRED: // in deferred mode, lights are calculated in the light shader, owned by the renderer
     shader_use(&engine->renderer.light_shader);
+    break;
+    case PIPELINE_FORWARD:
+    shader_use(&engine->renderer.forward_shader);
+    break;
+    default:
+    break;
+    }
     for(size_t index = 0; index < engine->world->entities_count; index++)
     {
         if(!engine->world->entities[index].active)
@@ -205,8 +213,29 @@ static inline void engine_send_lights(Engine* engine)
         if (!entity_has_component(&engine->world->entities[index], COMPONENT_LIGHT))
             continue;
 
+        switch(engine->renderer.render_mode)
+        {
+        case PIPELINE_DEFERRED:
         shader_update_light(&engine->renderer.light_shader, engine->world, index, &point_index, &spot_index);
+        break;
+        case PIPELINE_FORWARD:
+        shader_update_light(&engine->renderer.forward_shader, engine->world, index, &point_index, &spot_index);
+        break;
+        default:
+        break;
+        }
     }
-    shader_set_int(&engine->renderer.light_shader, "u_pointLight_count", point_index);
-    shader_set_int(&engine->renderer.light_shader, "u_spotLight_count", spot_index);
+    switch(engine->renderer.render_mode)
+    {
+        case PIPELINE_DEFERRED:
+        shader_set_int(&engine->renderer.light_shader, "u_pointLight_count", point_index);
+        shader_set_int(&engine->renderer.light_shader, "u_spotLight_count", spot_index);
+        break;
+        case PIPELINE_FORWARD:
+        shader_set_int(&engine->renderer.forward_shader, "u_pointLight_count", point_index);
+        shader_set_int(&engine->renderer.forward_shader, "u_spotLight_count", spot_index);
+        break;
+        default:
+        break;
+    }
 }

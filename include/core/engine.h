@@ -1,15 +1,13 @@
 #ifndef ENGINE_H
 #define ENGINE_H
 
-#include "shader.h"
-#include "window.h"
 #include "world.h"
+#include "window.h"
 #include "renderer.h"
 
 typedef struct Engine
 {
     Window window;
-    Shader shader;
     World* world;
     Renderer renderer;
 
