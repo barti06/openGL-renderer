@@ -1,8 +1,17 @@
 #include "world.h"
-#include "entity.h"
 #include "ui.h"
-#include "model.h"
+#include "utils.h"
+#include <log.h>
 #include <string.h>
+
+static inline Model* world_add_model(World* world, const char* path);
+static inline void world_add_light(World* world, EntityID id, LightType type);
+static inline void world_add_transform(World* world, EntityID id);
+static inline void world_add_renderable(World* world, EntityID id, Model* model);
+
+
+static inline void world_new_model(World* world, const char* path, const char* name);
+static inline void world_new_light(World* world, LightType type, const char* name);
 
 World* world_create(void)
 {
@@ -41,69 +50,6 @@ EntityID world_create_entity(World* world, const char* name)
     return INVALID_ENTITY_ID;
 }
 
-static inline Model* world_add_model(World* world, const char* path)
-{
-    if(world->model_count >= MAX_MODELS)
-    {
-        log_error("ERROR... world_add_model() SAYS: TOO MANY MODELS IN A SINGLE WORLD!");
-        return NULL;
-    }
-    uint32_t id = world->model_count++;
-    model_load(&world->models[id], path);
-    return &world->models[id];
-}
-
-static inline void world_add_transform(World* world, EntityID id)
-{
-    if(id > MAX_ENTITIES - 1)
-        return;
-
-    entity_add_component(&world->entities[id], COMPONENT_TRANSFORM);
-
-    transform_init(&world->transforms[id]);
-
-    return;
-}
-
-static inline void world_add_renderable(World* world, EntityID id, Model* model)
-{
-    if(id > MAX_ENTITIES - 1)
-        return;
-    
-    entity_add_component(&world->entities[id], COMPONENT_RENDERABLE);
-
-    renderable_init(&world->renderables[id], model);
-
-    return;
-}
-
-static inline void world_add_light(World* world, EntityID id, LightType type)
-{
-    if(id > MAX_ENTITIES - 1)
-        return;
-    
-    entity_add_component(&world->entities[id], COMPONENT_LIGHT);
-
-    switch(type)
-    {
-        case LIGHT_TYPE_POINT:
-        world->lights[id] = light_init_point();
-        break;
-        case LIGHT_TYPE_SPOT:
-        world->lights[id] = light_init_spot();
-        break;
-        case LIGHT_TYPE_DIRECTIONAL:
-        world->lights[id] = light_init_directional();
-        break;
-        // default to a point light
-        default:
-        world->lights[id] = light_init_point();
-        break;
-    }
-    return;
-}
-
-
 void world_update(World* world)
 {
     for(size_t index = 0; index < world->entities_count; index++)
@@ -114,34 +60,6 @@ void world_update(World* world)
             continue;
         transform_update(&world->transforms[index]);
     }
-}
-
-void world_new_model(World* world, const char* path, const char* name)
-{
-    log_info("world_new_model() SAYS: ADDING NEW MODEL ENTITY...");
-
-    Model* m = world_add_model(world, path);
-
-    EntityID e = world_create_entity(world, name);
-
-    world_add_transform(world, e);
-
-    world_add_renderable(world, e, m);
-
-    log_info("world_new_model() SAYS: ADDED NEW MODEL ENTITY!");
-}
-
-void world_new_light(World* world, LightType type, const char* name)
-{
-    log_info("world_new_light() SAYS: ADDING NEW LIGHT ENTITY...");
-
-    EntityID e = world_create_entity(world, name);
-
-    world_add_transform(world, e);
-
-    world_add_light(world, e, type);
-
-    log_info("world_new_light() SAYS: ADDED NEW LIGHT ENTITY!");
 }
 
 void world_destroy(World *world)
@@ -178,7 +96,6 @@ static struct
 static struct
 {
     bool open;
-    bool lt_chosen;
     LightType lt;
     char name[ENTITY_NAME_MAX_LENGTH];
 } add_light_s = {0};
@@ -294,16 +211,14 @@ void world_ui(World* world)
         world->current_event = WORLD_EVENT_DISABLE_INPUT;
         
         // entity light type loader
-        if(igCombo_Str_arr("Light type", &add_light_s.lt, light_type_names, LIGHT_TYPE_MAX, -1))
-            add_light_s.lt_chosen = true;
-
+        igCombo_Str_arr("Light type", &add_light_s.lt, light_type_names, LIGHT_TYPE_MAX, -1);
 
         // entity name loader
         igSpacing();
         igText("Entity name:");
         igInputText("##entity_name", add_light_s.name, sizeof(add_light_s.name), 0, NULL, NULL);
 
-        bool can_load = add_light_s.lt_chosen && add_light_s.name[0] != '\0';
+        bool can_load = add_light_s.name[0] != '\0';
 
         if (!can_load)
             igBeginDisabled(true);
@@ -451,4 +366,95 @@ void world_ui(World* world)
         igPopID();
     }
     igEnd();
+}
+
+static inline Model* world_add_model(World* world, const char* path)
+{
+    if(world->model_count >= MAX_MODELS)
+    {
+        log_error("ERROR... world_add_model() SAYS: TOO MANY MODELS IN A SINGLE WORLD!");
+        return NULL;
+    }
+    uint32_t id = world->model_count++;
+    model_load(&world->models[id], path);
+    return &world->models[id];
+}
+
+static inline void world_add_transform(World* world, EntityID id)
+{
+    if(id > MAX_ENTITIES - 1)
+        return;
+
+    entity_add_component(&world->entities[id], COMPONENT_TRANSFORM);
+
+    transform_init(&world->transforms[id]);
+
+    return;
+}
+
+static inline void world_add_renderable(World* world, EntityID id, Model* model)
+{
+    if(id > MAX_ENTITIES - 1)
+        return;
+    
+    entity_add_component(&world->entities[id], COMPONENT_RENDERABLE);
+
+    renderable_init(&world->renderables[id], model);
+
+    return;
+}
+
+static inline void world_add_light(World* world, EntityID id, LightType type)
+{
+    if(id > MAX_ENTITIES - 1)
+        return;
+    
+    entity_add_component(&world->entities[id], COMPONENT_LIGHT);
+
+    switch(type)
+    {
+        case LIGHT_TYPE_POINT:
+        world->lights[id] = light_init_point();
+        break;
+        case LIGHT_TYPE_SPOT:
+        world->lights[id] = light_init_spot();
+        break;
+        case LIGHT_TYPE_DIRECTIONAL:
+        world->lights[id] = light_init_directional();
+        break;
+        // default to a point light
+        default:
+        world->lights[id] = light_init_point();
+        break;
+    }
+    return;
+}
+
+
+static inline void world_new_model(World* world, const char* path, const char* name)
+{
+    log_info("world_new_model() SAYS: ADDING NEW MODEL ENTITY...");
+
+    Model* m = world_add_model(world, path);
+
+    EntityID e = world_create_entity(world, name);
+
+    world_add_transform(world, e);
+
+    world_add_renderable(world, e, m);
+
+    log_info("world_new_model() SAYS: ADDED NEW MODEL ENTITY!");
+}
+
+static inline void world_new_light(World* world, LightType type, const char* name)
+{
+    log_info("world_new_light() SAYS: ADDING NEW LIGHT ENTITY...");
+
+    EntityID e = world_create_entity(world, name);
+
+    world_add_transform(world, e);
+
+    world_add_light(world, e, type);
+
+    log_info("world_new_light() SAYS: ADDED NEW LIGHT ENTITY!");
 }

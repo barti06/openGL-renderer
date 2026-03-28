@@ -34,10 +34,10 @@ void texture_decode_all(cgltf_data* data, const char* base_path, TextureCache* c
 
 GLuint load_texture_view(cgltf_texture_view* texture_view, const char* base_path, TextureCache* cache);
 
+// for faster texture loading
 void texture_cache_init(TextureCache* cache, uint32_t initial_capacity);
 void texture_cache_free(TextureCache* cache);
+
 // returns 0 if not found
 GLuint texture_cache_get(const TextureCache* cache, cgltf_image* image);
-// insert a completed tex_id for a given image pointer
-void texture_cache_put(TextureCache* cache, cgltf_image* image, GLuint tex_id);
 #endif

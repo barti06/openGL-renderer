@@ -2,7 +2,6 @@
 #define CAMERA_H
 
 #include <cglm/cglm.h>
-#include <utils.h>
 
 typedef enum InputType {
     FORWARD,
@@ -42,9 +41,6 @@ typedef struct Camera
     
     int fov;
 } Camera;
-
-// update camera vectors
-void camera_update_vectors(Camera* camera);
 
 Camera camera_init(void);
 

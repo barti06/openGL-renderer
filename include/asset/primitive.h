@@ -4,7 +4,6 @@
 #include <stdbool.h>
 
 #include "cglm/types.h"
-#include "cgltf.h"
 #include "texture_loader.h"
 
 typedef struct MaterialPBR
@@ -115,10 +114,6 @@ typedef struct Mesh
     Primitive* primitives;
     uint32_t primitive_count;
 } Mesh;
-
-int upload_accessor_float(cgltf_accessor* accessor, GLuint VBO, GLuint attrib_index, GLint num_components);
-
-int upload_accessor_index(cgltf_accessor* accessor, GLuint EBO, GLsizei* out_count);
 
 int primitive_load(Primitive* model_primitive, cgltf_primitive* src, const char* base_path, TextureCache* cache);
 

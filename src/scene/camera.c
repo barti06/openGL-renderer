@@ -1,20 +1,22 @@
-#include "cglm/vec3.h"
-#include <camera.h>
+#include "camera.h"
 
-// Default camera values
+// Default camera values (could do as #define(s))
 const float D_YAW = -90.0f;
 const float D_PITCH = 0.0f;
 const float D_SPEED = 5.0f;
 const float D_SENSITIVITY = 0.333f;
 const float D_FOV = 75.0f;
 
+// update camera vectors
+static inline void camera_update_vectors(Camera* camera);
+
 void camera_update_vectors(Camera* camera)
 {
     // calculate new front vector
-    camera->front[0] = 
-        cosf(glm_rad(camera->yaw)) * cosf(glm_rad(camera->pitch));
+    camera->front[0] = cosf(glm_rad(camera->yaw)) * cosf(glm_rad(camera->pitch));
     camera->front[1] = sinf(glm_rad(camera->pitch));
     camera->front[2] = sinf(glm_rad(camera->yaw)) * cosf(glm_rad(camera->pitch));
+    
     // normalize it, as it is a direction vector
     glm_normalize(camera->front);
 

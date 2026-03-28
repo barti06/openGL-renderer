@@ -2,8 +2,6 @@
 #define RENDERER_H
 
 #include "shader.h"
-#include "world.h"
-#include "entity.h"
 
 typedef enum
 {
@@ -26,6 +24,8 @@ typedef enum
     GBUFFER_DEPTH,
     GBUFFER_MAX
 } gbufferView_t;
+
+typedef struct World World;
 
 typedef struct Renderer
 {
@@ -87,8 +87,6 @@ void renderer_ui(Renderer* renderer);
 void renderer_gbuffer_reload(Renderer* renderer);
 // camera position is needed for lighting calculations each frame
 void renderer_gbuffer_update(Renderer* renderer, vec3 camera_pos);
-
-void renderer_get_light(Renderer* renderer, LightComponent* lc, vec3 position);
 
 void renderer_postfx_reload(Renderer* renderer);
 void renderer_postfx_update(Renderer* renderer);

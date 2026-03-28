@@ -2,7 +2,6 @@
 #define MODEL_H
 
 #include "primitive.h"
-#include "shader.h"
 
 typedef struct Model
 {
@@ -20,9 +19,6 @@ typedef struct Model
 // stores a model in the first parameter, given 
 // in a location set by the second parameter
 int model_load(Model* model, const char* location);
-
-// this function takes a model for drawing and a shader to draw to
-void model_draw(const Model* model, Shader* shader, mat4 world_matrix);
 
 // this function deletes everything related to the model
 void model_free(Model* model);

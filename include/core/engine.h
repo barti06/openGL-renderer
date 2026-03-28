@@ -25,16 +25,6 @@ typedef struct Engine
 // init the engine
 void engine_init(Engine* engine, int argc, char* argv[]);
 
-// check for window key inputs
-void engine_handleInput(Engine* engine);
-
-// handles engine updates 
-// (mouse movement, keyboard input, delta time, etc)
-void engine_updates(Engine* engine);
-
-// engine draw function (may be moved later on)
-void engine_draw(Engine* engine);
-
 // main engine window loop
 void engine_loop(Engine* engine);
 

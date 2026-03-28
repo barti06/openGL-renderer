@@ -26,18 +26,18 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 #my source files
 target_sources(${PROJECT_NAME} PRIVATE
     src/main.c
-    src/shader.c
-    src/window.c
-    src/engine.c
-    src/camera.c
+    src/render/shader.c
+    src/core/window.c
+    src/core/engine.c
+    src/scene/camera.c
     src/implementations.c
-    src/model.c
-    src/primitive.c
-    src/world.c
-    src/entity.c
-    src/texture_loader.c
-    src/renderer.c
-    src/ui.c
+    src/asset/model.c
+    src/asset/primitive.c
+    src/scene/world.c
+    src/scene/entity.c
+    src/asset/texture_loader.c
+    src/render/renderer.c
+    src/core/ui.c
 )
 
 # use std C11
@@ -75,8 +75,12 @@ else()
 endif()
 
 # my header files
-target_include_directories(${PROJECT_NAME} 
-    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
+target_include_directories(${PROJECT_NAME} PUBLIC 
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/asset
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/render
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/scene
 )
 
 # include glfw

@@ -1,92 +1,17 @@
 #include "texture_loader.h"
 #include "stb_image.h"
 #include <log.h>
-#include <stdlib.h>
 #include <string.h>
 #include <threads.h>
 
+// insert a completed tex_id for a given image pointer
+static inline void texture_cache_put(TextureCache* cache, cgltf_image* image, GLuint tex_id);
+
 // the actual image decoder
-static inline int decode_job_fn(void* arg)
-{
-    TextureDecodeJob* job = (TextureDecodeJob*)arg;
-
-    if (job->image->buffer_view)
-    {
-        uint8_t* data = (uint8_t*)job->image->buffer_view->buffer->data + job->image->buffer_view->offset;
-        job->pixels = stbi_load_from_memory(data, (int)job->image->buffer_view->size, &job->width, &job->height, &job->channels, 0);
-    }
-    else if (job->image->uri)
-    {
-        char full_path[512];
-        snprintf(full_path, sizeof(full_path), "%s%s", job->base_path, job->image->uri);
-        job->pixels = stbi_load(full_path, &job->width, &job->height, &job->channels, 0);
-    }
-
-    if (!job->pixels)
-        job->failed = 1;
-
-    return 0;
-}
+static inline int decode_job_fn(void* arg);
 
 // main thread data uploader
-static inline GLuint gl_upload_decoded(TextureDecodeJob* job, cgltf_texture_view* view)
-{
-    GLenum internal_format, external_format;
-    int alignment;
-
-    switch (job->channels)
-    {
-        case 1: 
-        internal_format = GL_R8; 
-        external_format = GL_RED; 
-        alignment = 1; 
-        break;
-
-        case 2:
-        internal_format = GL_RG8;
-        external_format = GL_RG;
-        alignment = 2;
-        break;
-
-        case 3: 
-        internal_format = GL_RGB8; 
-        external_format = GL_RGB; alignment = 1; 
-        break;
-
-        case 4:
-        internal_format = GL_RGBA8;
-        external_format = GL_RGBA;
-        alignment = 4;
-        break;
-        default:
-            log_error("ERROR... gl_upload_decoded() SAYS: UNEXPECTED CHANNEL COUNT %d", job->channels);
-            return 0;
-    }
-
-    GLuint tex;
-    glGenTextures(1, &tex);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, alignment);
-    glTexImage2D(GL_TEXTURE_2D, 0, internal_format, job->width, job->height, 0, external_format, GL_UNSIGNED_BYTE, job->pixels);
-    glGenerateMipmap(GL_TEXTURE_2D);
-
-    cgltf_sampler* sampler = view ? view->texture->sampler : NULL;
-    int min_filter = (sampler && sampler->min_filter) ? sampler->min_filter : GL_LINEAR_MIPMAP_LINEAR;
-    int mag_filter = (sampler && sampler->mag_filter) ? sampler->mag_filter : GL_LINEAR;
-    int wrap_s = (sampler && sampler->wrap_s) ? sampler->wrap_s : GL_REPEAT;
-    int wrap_t = (sampler && sampler->wrap_t) ? sampler->wrap_t : GL_REPEAT;
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min_filter);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mag_filter);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap_s);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap_t);
-
-    GLfloat max_aniso;
-    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &max_aniso);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, max_aniso);
-
-    return tex;
-}
+static inline GLuint gl_upload_decoded(TextureDecodeJob* job, cgltf_texture_view* view);
 
 // decodes every image in parallel, must be called from model_load()
 void texture_decode_all(cgltf_data* data, const char* base_path, TextureCache* cache)
@@ -288,4 +213,85 @@ void texture_cache_put(TextureCache *cache, cgltf_image *image, GLuint tex_id)
         cache->entries = realloc(cache->entries, cache->capacity * sizeof(TextureCacheEntry));
     }
     cache->entries[cache->count++] = (TextureCacheEntry) {image, tex_id};
+}
+
+static inline int decode_job_fn(void* arg)
+{
+    TextureDecodeJob* job = (TextureDecodeJob*)arg;
+
+    if (job->image->buffer_view)
+    {
+        uint8_t* data = (uint8_t*)job->image->buffer_view->buffer->data + job->image->buffer_view->offset;
+        job->pixels = stbi_load_from_memory(data, (int)job->image->buffer_view->size, &job->width, &job->height, &job->channels, 0);
+    }
+    else if (job->image->uri)
+    {
+        char full_path[512];
+        snprintf(full_path, sizeof(full_path), "%s%s", job->base_path, job->image->uri);
+        job->pixels = stbi_load(full_path, &job->width, &job->height, &job->channels, 0);
+    }
+
+    if (!job->pixels)
+        job->failed = 1;
+
+    return 0;
+}
+
+static inline GLuint gl_upload_decoded(TextureDecodeJob* job, cgltf_texture_view* view)
+{
+    GLenum internal_format, external_format;
+    int alignment;
+
+    switch (job->channels)
+    {
+        case 1: 
+        internal_format = GL_R8; 
+        external_format = GL_RED; 
+        alignment = 1; 
+        break;
+
+        case 2:
+        internal_format = GL_RG8;
+        external_format = GL_RG;
+        alignment = 2;
+        break;
+
+        case 3: 
+        internal_format = GL_RGB8; 
+        external_format = GL_RGB; alignment = 1; 
+        break;
+
+        case 4:
+        internal_format = GL_RGBA8;
+        external_format = GL_RGBA;
+        alignment = 4;
+        break;
+        default:
+            log_error("ERROR... gl_upload_decoded() SAYS: UNEXPECTED CHANNEL COUNT %d", job->channels);
+            return 0;
+    }
+
+    GLuint tex;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, alignment);
+    glTexImage2D(GL_TEXTURE_2D, 0, internal_format, job->width, job->height, 0, external_format, GL_UNSIGNED_BYTE, job->pixels);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    cgltf_sampler* sampler = view ? view->texture->sampler : NULL;
+    int min_filter = (sampler && sampler->min_filter) ? sampler->min_filter : GL_LINEAR_MIPMAP_LINEAR;
+    int mag_filter = (sampler && sampler->mag_filter) ? sampler->mag_filter : GL_LINEAR;
+    int wrap_s = (sampler && sampler->wrap_s) ? sampler->wrap_s : GL_REPEAT;
+    int wrap_t = (sampler && sampler->wrap_t) ? sampler->wrap_t : GL_REPEAT;
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min_filter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mag_filter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap_s);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap_t);
+
+    GLfloat max_aniso;
+    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &max_aniso);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, max_aniso);
+
+    return tex;
 }

@@ -1,5 +1,6 @@
 #include "entity.h"
-#include <math.h>
+#include "shader.h"
+#include <cglm/cglm.h>
 #include <string.h>
 
 #define DEFAULT_LINEAR    0.027f

@@ -2,9 +2,17 @@
 #include "ui.h"
 #include <string.h>
 
-static inline void engine_send_lights(Engine* engine);
+// check for window key inputs
+static inline void engine_handleInput(Engine* engine);
 
-const char *argument = "-w";
+// handles engine updates 
+// (mouse movement, keyboard input, delta time, etc)
+static inline void engine_updates(Engine* engine);
+
+// engine draw function (may be moved later on)
+static inline void engine_draw(Engine* engine);
+
+static inline void engine_send_lights(Engine* engine);
 
 void engine_init(Engine *engine, int argc, char *argv[])
 {
@@ -27,12 +35,6 @@ void engine_init(Engine *engine, int argc, char *argv[])
     Window *win = &engine->window;
     window_init(win, w, h);
 
-    // load glad
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-	{
-		log_error("\nERROR... engine_init() SAYS: COULDN'T LOAD GLAD!\n");
-	}
-
     renderer_init(&engine->renderer, &engine->shader, win->width, win->height);
 
     engine->last_time = 0.0f; // init delta timing
@@ -48,7 +50,26 @@ void engine_init(Engine *engine, int argc, char *argv[])
     engine->world = world_create();
 }
 
-void engine_handleInput(Engine* engine)
+void engine_loop(Engine* engine)
+{    
+
+    while(!glfwWindowShouldClose(engine->window.ptr))
+    {
+        engine_updates(engine);
+
+        engine_draw(engine);
+
+        window_update(&engine->window);
+    }
+}
+
+void engine_cleanup(Engine* engine)
+{
+    world_destroy(engine->world);
+    window_cleanup(&engine->window);
+}
+
+static inline void engine_handleInput(Engine* engine)
 {
     if(engine->world->current_event == WORLD_EVENT_DISABLE_INPUT)
         return;
@@ -106,7 +127,7 @@ void engine_handleInput(Engine* engine)
     }
 } 
 
-void engine_updates(Engine* engine)
+static inline void engine_updates(Engine* engine)
 {
     // delta time
     engine->current_time = glfwGetTime(); 
@@ -122,7 +143,7 @@ void engine_updates(Engine* engine)
     renderer_updates(engine->world, &engine->renderer, engine->window.width, engine->window.height);
 }
 
-void engine_draw(Engine* engine)
+static inline void engine_draw(Engine* engine)
 {
     ui_begin();
     renderer_draw_world(engine->world, &engine->renderer, engine->delta_time);
@@ -131,26 +152,7 @@ void engine_draw(Engine* engine)
     ui_end();
 }
 
-void engine_loop(Engine* engine)
-{    
-
-    while(!glfwWindowShouldClose(engine->window.ptr))
-    {
-        engine_updates(engine);
-
-        engine_draw(engine);
-
-        window_update(&engine->window);
-    }
-}
-
-void engine_cleanup(Engine* engine)
-{
-    world_destroy(engine->world);
-    window_cleanup(&engine->window);
-}
-
-void shader_update_light(Shader* shader, World* wl, int32_t index, int32_t* point_ind, int32_t* spot_ind)
+static inline void shader_update_light(Shader* shader, World* wl, int32_t index, int32_t* point_ind, int32_t* spot_ind)
 {
     char uniform_name[32];
     switch(wl->lights[index].light_type)
@@ -191,7 +193,7 @@ void shader_update_light(Shader* shader, World* wl, int32_t index, int32_t* poin
     }
 }
 
-void engine_send_lights(Engine* engine)
+static inline void engine_send_lights(Engine* engine)
 {
     int32_t point_index = 0;
     int32_t spot_index = 0;

@@ -3,8 +3,6 @@
 
 #include "entity.h"
 #include "camera.h"
-#include <stddef.h>
-#include <assert.h>
 
 #define MAX_ENTITIES 512
 #define MAX_MODELS 64
@@ -37,7 +35,5 @@ typedef struct World
 World* world_create(void);
 void world_update(World* world);
 void world_ui(World* world);
-void world_new_model(World* world, const char* path, const char* name);
-void world_new_light(World* world, LightType type, const char* name);
 void world_destroy(World* world);
 #endif
