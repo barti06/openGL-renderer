@@ -39,6 +39,7 @@ typedef struct Renderer
     Shader* active_shader;
     Shader deferred_shader;
     Shader forward_shader;
+    Shader depth_shader; // for depth prepass on fwd rendering
 
     vec2 viewportSize;
     float nearZ;
@@ -61,12 +62,16 @@ typedef struct Renderer
     GLuint geometry_query;
     GLuint light_query;
     GLuint fx_query;
+    GLuint ssao_query;
+    GLuint ssao_blur_query;
 
     float stats_timer;
     float stats_update_interval;
     float stats_geometry_ms;
     float stats_light_ms;
     float stats_fx_ms;
+    float stats_ssao_ms;
+    float stats_ssao_blur_ms;
     float stats_fps;
 
     // various rendering related settings
@@ -91,6 +96,20 @@ typedef struct Renderer
     float bloom_threshold;
     float bloom_strength;
     bool bloom_enabled;
+
+    vec3 ssao_kernel[64];
+    GLuint ssao_noise_texture;
+    GLuint ssao_fbo;
+    GLuint ssao_texture; // noisy ao
+    GLuint ssao_blur_fbo;
+    GLuint ssao_blur_texture; // blurred AO sent to lighting pass
+    // ssao settings
+    float ssao_radius;
+    float ssao_bias;
+    float ssao_strength;
+    bool ssao_enabled;
+    Shader ssao_shader;
+    Shader ssao_blur_shader;
 
     // the drawing quad + shaders
     GLuint quad_VAO;

@@ -45,6 +45,7 @@ uniform sampler2D g_albedo;
 uniform sampler2D g_orm;
 uniform sampler2D g_emissive;
 uniform sampler2D g_depth;
+uniform sampler2D ssao;
 
 uniform vec3 u_camera_position;
 uniform int u_gbuffer_view;
@@ -53,6 +54,8 @@ uniform int u_pointLight_count;
 uniform point_light u_pointlights[MAX_POINTLIGHT_COUNT];
 
 uniform float u_bloom_threshold;
+
+uniform bool u_ssao_enabled;
 
 // pbr utilities
 float D_GGX(float NdotH, float roughness);
@@ -78,12 +81,12 @@ void main()
     vec3 albedo = texture(g_albedo, v_uv).rgb;
 
     vec4 ormt = texture(g_orm, v_uv);
-    float occlusion = ormt.r;
+    //float occlusion = ormt.r;
+    float occlusion = texture(ssao, v_uv).r;
     float roughness = ormt.g;
     float metalness = ormt.b;
 
     vec3 emissive = texture(g_emissive, v_uv).rgb;
-
 
     float depth = texture(g_depth, v_uv).r;
 

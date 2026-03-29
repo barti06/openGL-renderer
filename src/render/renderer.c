@@ -28,6 +28,10 @@ static inline void renderer_model_draw(const Model* model, Renderer* renderer, m
 
 static inline void renderer_get_light(Renderer* renderer, LightComponent* lc, vec3 position);
 
+static inline void ssao_setup(Renderer* renderer, int w, int h);
+
+static inline void ssao_update(Renderer* renderer, int w, int h);
+
 float quadVertices[] = { 
         // positions   // texCoords
         -1.0f,  1.0f,  0.0f, 1.0f,
@@ -56,8 +60,8 @@ void renderer_init(Renderer* renderer, pipeline_t pipeline, int viewportX,
     renderer->viewportSize[0] = viewportX;
     renderer->viewportSize[1] = viewportY;
     // init deferred and forward shaders
-	shader_init(&renderer->deferred_shader, "shaders/deferred.vert", "shaders/deferred.frag");
-    shader_init(&renderer->forward_shader, "shaders/forward.vert", "shaders/forward.frag");
+	shader_init(&renderer->deferred_shader, "shaders/geometry.vert", "shaders/deferred.frag");
+    shader_init(&renderer->forward_shader, "shaders/geometry.vert", "shaders/forward.frag");
     // set the active shader
     switch(pipeline)
     {
@@ -88,10 +92,14 @@ void renderer_init(Renderer* renderer, pipeline_t pipeline, int viewportX,
     shader_init(&renderer->fx_shader, "shaders/quad.vert", "shaders/postfx.frag");
     // bloom shaders
     shader_init(&renderer->bloom_blur_shader, "shaders/quad.vert", "shaders/bloom_blur.frag");
-
+    //ssao shaders
+    shader_init(&renderer->ssao_shader, "shaders/quad.vert", "shaders/ssao.frag");
+    shader_init(&renderer->ssao_blur_shader, "shaders/quad.vert", "shaders/ssao_blur.frag");
+    
     // init fbos
     gbuffer_setup(renderer, viewportX, viewportY);
     postFX_setup(renderer, viewportX, viewportY);
+    ssao_setup(renderer, viewportX, viewportY);
 
     // init gbuffer shader vars
     shader_use(&renderer->light_shader);
@@ -101,6 +109,7 @@ void renderer_init(Renderer* renderer, pipeline_t pipeline, int viewportX,
     shader_set_int(&renderer->light_shader, "g_orm", 3);
     shader_set_int(&renderer->light_shader, "g_emissive", 4);
     shader_set_int(&renderer->light_shader, "g_depth", 5);
+    shader_set_int(&renderer->light_shader, "ssao", 6);
 
     // init post processing shader
     shader_use(&renderer->fx_shader);
@@ -120,6 +129,8 @@ void renderer_init(Renderer* renderer, pipeline_t pipeline, int viewportX,
     glGenQueries(1, &renderer->geometry_query);
     glGenQueries(1, &renderer->light_query);
     glGenQueries(1, &renderer->fx_query);
+    glGenQueries(1, &renderer->ssao_query);
+    glGenQueries(1, &renderer->ssao_blur_query);
     renderer->stats_update_interval = 0.25f; // updates imgui timers four times a second
     renderer->stats_timer = 0.0f;
 
@@ -139,6 +150,7 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
         if(renderer->render_mode == PIPELINE_DEFERRED)
             gbuffer_update(renderer, renderer->viewportSize[0], renderer->viewportSize[1]);
 
+        ssao_update(renderer, renderer->viewportSize[0], renderer->viewportSize[1]);
         postFX_update(renderer, renderer->viewportSize[0], renderer->viewportSize[1]);
     }
 
@@ -163,6 +175,13 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
         break;
     }
 
+    shader_use(&renderer->ssao_shader);
+    shader_set_mat4(&renderer->ssao_shader, "u_view", world->camera.view);
+    shader_set_mat4(&renderer->ssao_shader, "u_projection", world->camera.projection);
+    shader_set_float(&renderer->ssao_shader, "u_radius", renderer->ssao_radius);
+    shader_set_float(&renderer->ssao_shader, "u_bias", renderer->ssao_bias);
+    shader_set_float(&renderer->ssao_shader, "u_strength", renderer->ssao_strength);
+
     renderer_postfx_update(renderer);
     // update the camera
     camera_update_matrices(&world->camera, renderer->viewportSize, renderer->nearZ, renderer->farZ);
@@ -176,7 +195,7 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     switch(renderer->render_mode)
     {
         case PIPELINE_DEFERRED:
-        glBindFramebuffer(GL_FRAMEBUFFER, renderer->gBuffer_fbo);    // for geometry pass
+        glBindFramebuffer(GL_FRAMEBUFFER, renderer->gBuffer_fbo); // for geometry pass
         break;
         case PIPELINE_FORWARD:
         glBindFramebuffer(GL_FRAMEBUFFER, renderer->fx_fbo);
@@ -215,10 +234,40 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glEndQuery(GL_TIME_ELAPSED);
 
-    glBeginQuery(GL_TIME_ELAPSED, renderer->light_query);
     if(renderer->render_mode == PIPELINE_DEFERRED)
     {
+        // ssao pass
+        glBeginQuery(GL_TIME_ELAPSED, renderer->ssao_query);
+        glBindFramebuffer(GL_FRAMEBUFFER, renderer->ssao_fbo);
+        glClear(GL_COLOR_BUFFER_BIT);
+        shader_use(&renderer->ssao_shader);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, renderer->g_position);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, renderer->g_normal);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, renderer->g_depth);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, renderer->ssao_noise_texture);
+        glBindVertexArray(renderer->quad_VAO);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glEndQuery(GL_TIME_ELAPSED);
+
+        // ssao blur pass
+        glBeginQuery(GL_TIME_ELAPSED, renderer->ssao_blur_query);
+        glBindFramebuffer(GL_FRAMEBUFFER, renderer->ssao_blur_fbo);
+        glClear(GL_COLOR_BUFFER_BIT);
+        shader_use(&renderer->ssao_blur_shader);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, renderer->ssao_texture);
+        glBindVertexArray(renderer->quad_VAO);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glEndQuery(GL_TIME_ELAPSED);
+
         // light pass
+        glBeginQuery(GL_TIME_ELAPSED, renderer->light_query);
         glBindFramebuffer(GL_FRAMEBUFFER, renderer->fx_fbo);
         shader_use(&renderer->light_shader);
         glDisable(GL_DEPTH_TEST);
@@ -241,20 +290,24 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
         // send depth texture
         glActiveTexture(GL_TEXTURE5);
         glBindTexture(GL_TEXTURE_2D, renderer->g_depth);
+        // send ssao texture
+        // send ssao texture (NEW)
+        glActiveTexture(GL_TEXTURE6);
+        glBindTexture(GL_TEXTURE_2D, renderer->ssao_blur_texture);
         // render light pass to a quad
         glBindVertexArray(renderer->quad_VAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glEndQuery(GL_TIME_ELAPSED);
         glEnable(GL_DEPTH_TEST);
     }
-    glEndQuery(GL_TIME_ELAPSED);
 
     glBeginQuery(GL_TIME_ELAPSED, renderer->fx_query);
     if(renderer->bloom_enabled)
     {
         // pingpong blur
         bool horizontal = true;
-        // first pass reads from bloom_bright, subsequent passes ping-pong between bloom_tex[0/1]
+        // first pass reads from bloom_bright then other passes pingpong between bloom_tex
         glActiveTexture(GL_TEXTURE0);
         shader_use(&renderer->bloom_blur_shader);
         shader_set_int(&renderer->bloom_blur_shader, "u_image", 0);
@@ -279,20 +332,24 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, renderer->fx_depth);
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, renderer->bloom_enabled ? renderer->fx_bloom[0] : 0);
+    glBindTexture(GL_TEXTURE_2D, renderer->fx_bloom[0]);
     glBindVertexArray(renderer->quad_VAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glEnable(GL_DEPTH_TEST);
     glEndQuery(GL_TIME_ELAPSED);
 
-    GLuint64 time_geometry, time_light, time_fx;
+    GLuint64 time_geometry, time_light, time_fx, time_ssao, time_ssao_blur;
     glGetQueryObjectui64v(renderer->geometry_query, GL_QUERY_RESULT, &time_geometry);
     glGetQueryObjectui64v(renderer->light_query, GL_QUERY_RESULT, &time_light);
     glGetQueryObjectui64v(renderer->fx_query, GL_QUERY_RESULT, &time_fx);
+    glGetQueryObjectui64v(renderer->ssao_query, GL_QUERY_RESULT, &time_ssao);
+    glGetQueryObjectui64v(renderer->ssao_blur_query, GL_QUERY_RESULT, &time_ssao_blur);
 
     float geometry_display = time_geometry / 1000000.0;
     float light_display = time_light / 1000000.0;
     float fx_display = time_fx / 1000000.0;
+    float ssao_display = time_ssao / 1000000.0;
+    float ssao_blur_display = time_ssao_blur / 1000000.0;
     renderer->stats_timer += delta_time;
     if (renderer->stats_timer >= renderer->stats_update_interval)
     {
@@ -300,6 +357,8 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
         renderer->stats_geometry_ms = geometry_display;
         renderer->stats_light_ms = light_display;
         renderer->stats_fx_ms = fx_display;
+        renderer->stats_ssao_ms = ssao_display;
+        renderer->stats_ssao_blur_ms = ssao_blur_display;
         renderer->stats_timer = 0.0f;
     }
 }
@@ -314,6 +373,7 @@ void renderer_gbuffer_reload(Renderer* renderer)
     shader_set_int(&renderer->light_shader, "g_orm", 3);
     shader_set_int(&renderer->light_shader, "g_emissive", 4);
     shader_set_int(&renderer->light_shader, "g_depth", 5);
+    shader_set_int(&renderer->light_shader, "g_ssao", 6);
 }
 void renderer_gbuffer_update(Renderer* renderer, vec3 camera_pos)
 {
@@ -383,6 +443,8 @@ void renderer_ui(Renderer* renderer)
     igText("FPS: %.3f", renderer->stats_fps);
     igText("Geometry pass: %.3f ms", renderer->stats_geometry_ms);
     igText("Lighting pass: %.3f ms", renderer->stats_light_ms);
+    igText("SSAO pass: %.3f ms", renderer->stats_ssao_ms);
+    igText("SSAO blur pass: %.3f ms", renderer->stats_ssao_blur_ms);
     igText("Post-Processing pass: %.3f ms", renderer->stats_fx_ms);
     igSeparator();
 
@@ -410,9 +472,15 @@ void renderer_ui(Renderer* renderer)
         igCheckbox("Bloom", &renderer->bloom_enabled);
         if(renderer->bloom_enabled)
         {
-            igSliderFloat("Bloom strength", &renderer->bloom_strength, 0.0f, 50.0f, "%.1f", 0);
-            igSliderFloat("Bloom threshold", &renderer->bloom_threshold, 0.0f, 50.0f, "%.1f", 0);
-            igSliderInt("Bloom blur passes", &renderer->bloom_blur_passes, 0, 250, "%d", 0);
+            igSliderFloat("Bloom strength", &renderer->bloom_strength, 0.0f, 20.0f, "%.1f", 0);
+            igSliderFloat("Bloom threshold", &renderer->bloom_threshold, 0.0f, 1.0f, "%.2f", 0);
+            igSliderInt("Bloom blur passes", &renderer->bloom_blur_passes, 0, 100, "%d", 0);
+        }
+        igCheckbox("SSAO", &renderer->ssao_enabled);
+        {
+            igSliderFloat("SSAO strength", &renderer->ssao_strength, 0.0f, 20.0f, "%.1f", 0);
+            igSliderFloat("SSAO bias", &renderer->ssao_bias, 0.0f, 1.0f, "%.2f", 0);
+            igSliderFloat("SSAO radius", &renderer->ssao_radius, 0.0f, 10.0f, "%.1f", 0);
         }
     }
     igEnd();
@@ -611,6 +679,115 @@ static inline void postFX_update(Renderer* renderer, int w, int h)
         glBindTexture(GL_TEXTURE_2D, 0);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
+}
+
+static inline void ssao_setup(Renderer* renderer, int w, int h)
+{
+    // generate kernel samples
+    srand(42);
+    for(int i = 0; i < 64; i++)
+    {
+        vec3 sample = {
+            (float)rand()/RAND_MAX * 2.0f - 1.0f,  // from -1 to 1
+            (float)rand()/RAND_MAX * 2.0f - 1.0f,  // from -1 to 1
+            (float)rand()/RAND_MAX // hemisphere
+        };
+        // normalize and scale
+        glm_vec3_normalize(sample);
+        float scale = (float)i / 64.0f;
+        // more samples close to the fragment
+        scale = 0.1f + scale * scale * 0.9f;
+        glm_vec3_scale(sample, scale, sample);
+        glm_vec3_copy(sample, renderer->ssao_kernel[i]);
+    }
+
+    // generate 4x4 noise texture (tiled over screen to avoid banding)
+    // noise rotates the kernel per-pixel to get more sample variety
+    vec3 ssao_noise[16];
+    for(int i = 0; i < 16; i++)
+    {
+        vec3 noise = {
+            (float)rand()/RAND_MAX * 2.0f - 1.0f,
+            (float)rand()/RAND_MAX * 2.0f - 1.0f,
+            0.0f  // rotation around z axis only
+        };
+        glm_vec3_copy(noise, ssao_noise[i]);
+    }
+    // ssao noise tex
+    glGenTextures(1, &renderer->ssao_noise_texture);
+    glBindTexture(GL_TEXTURE_2D, renderer->ssao_noise_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, 4, 4, 0, GL_RGB, GL_FLOAT, ssao_noise);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT); // enable tiling
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // ssao fbo and tex
+    glGenFramebuffers(1, &renderer->ssao_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->ssao_fbo);
+    glGenTextures(1, &renderer->ssao_texture);
+    glBindTexture(GL_TEXTURE_2D, renderer->ssao_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R16F, w, h, 0, GL_RED, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderer->ssao_texture, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // ssao fbo and tex
+    glGenFramebuffers(1, &renderer->ssao_blur_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->ssao_blur_fbo);
+    glGenTextures(1, &renderer->ssao_blur_texture);
+    glBindTexture(GL_TEXTURE_2D, renderer->ssao_blur_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R16F, w, h, 0, GL_RED, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderer->ssao_blur_texture, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    renderer->ssao_radius = 0.5f;
+    renderer->ssao_bias = 0.01f;
+    renderer->ssao_strength = 1.3f;
+    renderer->ssao_enabled = true;
+
+    shader_use(&renderer->ssao_shader);
+    shader_set_int(&renderer->ssao_shader, "g_position", 0);
+    shader_set_int(&renderer->ssao_shader, "g_normal", 1);
+    shader_set_int(&renderer->ssao_shader, "g_depth", 2);
+    shader_set_int(&renderer->ssao_shader, "u_noise", 3);
+    for (int i = 0; i < 64; ++i) 
+    {
+        char uniform_name[64];
+        snprintf(uniform_name, sizeof(uniform_name), "u_samples[%d]", i);
+        shader_set_vec3(&renderer->ssao_shader, uniform_name, renderer->ssao_kernel[i]);
+    }
+}
+
+static inline void ssao_update(Renderer* renderer, int w, int h)
+{
+    //glBindTexture(GL_TEXTURE_2D, renderer->ssao_noise_texture);
+    //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, 4, 4, 0, GL_RGB, GL_FLOAT, ssao_noise);
+    //glBindTexture(GL_TEXTURE_2D, 0);
+
+    // ssao fbo and tex
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->ssao_fbo);
+    glBindTexture(GL_TEXTURE_2D, renderer->ssao_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R16F, w, h, 0, GL_RED, GL_FLOAT, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // ssao fbo and tex
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->ssao_blur_fbo);
+    glBindTexture(GL_TEXTURE_2D, renderer->ssao_blur_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R16F, w, h, 0, GL_RED, GL_FLOAT, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    float noise_scale_x = (float)renderer->viewportSize[0] / 4.0f;
+    float noise_scale_y = (float)renderer->viewportSize[1] / 4.0f;
+    shader_set_vec2(&renderer->ssao_shader, "u_noise_scale", (vec2){noise_scale_x, noise_scale_y});
 }
 
 static inline void renderer_model_draw(const Model* model, Renderer* renderer, mat4 world_matrix)
