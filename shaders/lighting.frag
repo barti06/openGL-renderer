@@ -2,7 +2,9 @@
 #define PI 3.14159265359
 #define MAX_POINTLIGHT_COUNT 64
 
-out vec4 FragColor;
+layout (location = 0) out vec4 FragColor;
+layout (location = 1) out vec4 brightColor;
+
 
 in vec2 v_uv;
 
@@ -49,6 +51,8 @@ uniform int u_gbuffer_view;
 
 uniform int u_pointLight_count;
 uniform point_light u_pointlights[MAX_POINTLIGHT_COUNT];
+
+uniform float u_bloom_threshold;
 
 // pbr utilities
 float D_GGX(float NdotH, float roughness);
@@ -123,6 +127,10 @@ void main()
         color = vec3(depth);
 
     FragColor = vec4(color, 1.0);
+
+    // bloom
+    float brightness = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    brightColor = brightness > u_bloom_threshold ? vec4(color, 1.0) : vec4(0.0, 0.0, 0.0, 1.0);
 } 
 
 float D_GGX(float NdotH, float roughness)

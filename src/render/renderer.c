@@ -153,6 +153,7 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
         shader_use(&renderer->light_shader);
         shader_set_vec3(&renderer->light_shader, "u_camera_position", world->camera.position);
         shader_set_int(&renderer->light_shader, "u_gbuffer_view", (int32_t)renderer->gbuffer_view);
+        shader_set_float(&renderer->light_shader, "u_bloom_threshold", renderer->bloom_threshold);
         break;
         case PIPELINE_FORWARD:
         shader_use(&renderer->forward_shader);
