@@ -96,8 +96,7 @@ typedef struct Renderer
     float bloom_threshold;
     float bloom_strength;
     bool bloom_enabled;
-
-    vec3 ssao_kernel[64];
+    
     GLuint ssao_noise_texture;
     GLuint ssao_fbo;
     GLuint ssao_texture; // noisy ao

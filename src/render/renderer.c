@@ -685,6 +685,7 @@ static inline void ssao_setup(Renderer* renderer, int w, int h)
 {
     // generate kernel samples
     srand(42);
+    vec3 ssao_kernel[64];
     for(int i = 0; i < 64; i++)
     {
         vec3 sample = {
@@ -698,7 +699,7 @@ static inline void ssao_setup(Renderer* renderer, int w, int h)
         // more samples close to the fragment
         scale = 0.1f + scale * scale * 0.9f;
         glm_vec3_scale(sample, scale, sample);
-        glm_vec3_copy(sample, renderer->ssao_kernel[i]);
+        glm_vec3_copy(sample, ssao_kernel[i]);
     }
 
     // generate 4x4 noise texture (tiled over screen to avoid banding)
@@ -761,7 +762,7 @@ static inline void ssao_setup(Renderer* renderer, int w, int h)
     {
         char uniform_name[64];
         snprintf(uniform_name, sizeof(uniform_name), "u_samples[%d]", i);
-        shader_set_vec3(&renderer->ssao_shader, uniform_name, renderer->ssao_kernel[i]);
+        shader_set_vec3(&renderer->ssao_shader, uniform_name, ssao_kernel[i]);
     }
 }
 
