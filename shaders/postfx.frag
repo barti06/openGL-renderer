@@ -5,6 +5,7 @@ out vec4 FragColor;
 in vec2 v_uv;
 
 uniform sampler2D fx_scene;
+uniform sampler2D fx_bloom;
 uniform sampler2D fx_depth;
 
 // tone map settings
@@ -22,6 +23,9 @@ uniform float u_vignette_strength = 2.0;
 
 uniform bool u_chromatic_aberration_enabled = false;
 uniform float u_chromatic_aberration_strength = 2.0;
+
+uniform bool u_bloom_enabled = true;
+uniform float u_bloom_strength = 1.0;
 
 // tone mapping functions
 vec3 ACES(vec3 x);
@@ -50,6 +54,9 @@ void main()
         color = texture(fx_scene, v_uv).rgb;
 
     color *= u_exposure;
+
+    if(u_bloom_enabled)
+        color += texture(fx_bloom, v_uv).rgb * u_bloom_strength;
 
     // tone mapping, always default to ACES
     if(u_tonemap == 1)

@@ -2,7 +2,8 @@
 #define PI 3.14159265359
 #define MAX_POINTLIGHT_COUNT 64
 
-out vec4 fragColor;
+layout (location = 0) out vec4 fragColor;
+layout (location = 1) out vec4 brightColor;
 
 in vec2 v_uv;
 in vec2 v_uv2;
@@ -50,6 +51,8 @@ struct point_light
 uniform vec3 u_camera_position;
 uniform int u_pointLight_count;
 uniform point_light u_pointlights[MAX_POINTLIGHT_COUNT];
+uniform float u_bloom_threshold;
+
 
 float D_GGX(float NdotH, float roughness);
 float G_SchlickGGX(float NdotX, float roughness);
@@ -66,15 +69,19 @@ void main()
 
     vec3 albedo = pow(color.rgb, vec3(2.2));
 
+    // grab emissive maps
     vec2 emissive_uvs = u_has_emissive_texcoord ? v_uv2 : v_uv;
     vec3 emissive = u_has_emissive ? pow(texture(u_emissive, emissive_uvs).rgb, vec3(2.2)) * u_emissive_factor * u_emissive_strength : u_emissive_factor * u_emissive_strength;
 
+    // grab normal maps
     vec3 normal = u_has_normal ? texture(u_normal, v_uv * u_normal_scale).rgb * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);
     normal = normalize(v_TBN * normal);
 
+    // grab occlusion written onto the model
     vec2 ao_uvs = u_has_occlusion_texcoord ? v_uv2 : v_uv;
     float ao = u_has_ao ? texture(u_ao, ao_uvs * u_occlusion_scale).r * u_occlusion_strength : 1.0;
 
+    // grab rm
     vec3 metal_rough = u_has_metallic_roughness ? texture(u_metallic_roughness, v_uv).rgb : vec3(0.0);
     float roughness = u_has_metallic_roughness ? metal_rough.g * u_roughness_factor : u_roughness_factor;
     float metallic  = u_has_metallic_roughness ? metal_rough.b * u_metallic_factor  : u_metallic_factor;
@@ -82,7 +89,11 @@ void main()
     vec3 view = normalize(u_camera_position - v_fragment_pos);
     float NdotV = max(dot(normal, view), 0.0);
 
-    vec3 total_light = vec3(0.1) * albedo * ao; // ambient
+    // ambient
+    vec3 total_light = vec3(0.1) * albedo;
+    if(ao > 0.0)
+        total_light *= ao;
+    // pointlights
     for(int i = 0; i < u_pointLight_count; i++)
     {
         point_light pl = u_pointlights[i];
@@ -90,6 +101,7 @@ void main()
         total_light += get_point_light(pl, normal, v_fragment_pos, view, albedo, metallic, roughness, NdotV);
     }
 
+    // volume
     float out_alpha = color.a;
     if(u_has_volume && u_volume_attenuation_distance > 0.0)
     {
@@ -99,7 +111,14 @@ void main()
         out_alpha = color.a > 0.0 ? color.a : 0.5;
     }
 
-    fragColor = vec4(total_light + emissive, out_alpha);
+    vec3 final_color = total_light + emissive;
+
+    // main scene color
+    fragColor = vec4(final_color, out_alpha);
+
+    // bloom
+    float brightness = dot(final_color, vec3(0.2126, 0.7152, 0.0722));
+    brightColor = brightness > u_bloom_threshold ? vec4(final_color, 1.0) : vec4(0.0, 0.0, 0.0, 1.0);
 }
 
 float D_GGX(float NdotH, float roughness)

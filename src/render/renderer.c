@@ -49,7 +49,8 @@ void renderer_init(Renderer* renderer, pipeline_t pipeline, int viewportX,
 	}
 
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    
+    glEnable(GL_MULTISAMPLE);
+
     renderer->nearZ = DEFAULT_NEARZ;
     renderer->farZ = DEFAULT_FARZ;
     renderer->viewportSize[0] = viewportX;
@@ -83,8 +84,10 @@ void renderer_init(Renderer* renderer, pipeline_t pipeline, int viewportX,
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
 
     // init shaders
-    shader_init(&renderer->light_shader, "shaders/lighting.vert", "shaders/lighting.frag");
-    shader_init(&renderer->fx_shader, "shaders/postfx.vert", "shaders/postfx.frag");
+    shader_init(&renderer->light_shader, "shaders/quad.vert", "shaders/lighting.frag");
+    shader_init(&renderer->fx_shader, "shaders/quad.vert", "shaders/postfx.frag");
+    // bloom shaders
+    shader_init(&renderer->bloom_blur_shader, "shaders/quad.vert", "shaders/bloom_blur.frag");
 
     // init fbos
     gbuffer_setup(renderer, viewportX, viewportY);
@@ -103,6 +106,7 @@ void renderer_init(Renderer* renderer, pipeline_t pipeline, int viewportX,
     shader_use(&renderer->fx_shader);
     shader_set_int(&renderer->fx_shader, "fx_scene", 0);
     shader_set_int(&renderer->fx_shader, "fx_depth", 1);
+    shader_set_int(&renderer->fx_shader, "fx_bloom", 2);
     renderer->gamma = DEFAULT_GAMMA;
     renderer->exposure = DEFAULT_EXPOSURE;
     renderer->brightness = DEFAULT_BRIGHTNESS;
@@ -118,6 +122,11 @@ void renderer_init(Renderer* renderer, pipeline_t pipeline, int viewportX,
     glGenQueries(1, &renderer->fx_query);
     renderer->stats_update_interval = 0.25f; // updates imgui timers four times a second
     renderer->stats_timer = 0.0f;
+
+    renderer->bloom_enabled = true;
+    renderer->bloom_threshold = 0.2f;
+    renderer->bloom_strength = 1.0f;
+    renderer->bloom_blur_passes = 5;
 }
 
 void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY)
@@ -126,6 +135,7 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
     {
         renderer->viewportSize[0] = windowX;
         renderer->viewportSize[1] = windowY;
+
         if(renderer->render_mode == PIPELINE_DEFERRED)
             gbuffer_update(renderer, renderer->viewportSize[0], renderer->viewportSize[1]);
 
@@ -147,6 +157,7 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
         case PIPELINE_FORWARD:
         shader_use(&renderer->forward_shader);
         shader_set_vec3(&renderer->forward_shader, "u_camera_position", world->camera.position);
+        shader_set_float(&renderer->forward_shader, "u_bloom_threshold", renderer->bloom_threshold);
         default:
         break;
     }
@@ -238,12 +249,36 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     glEndQuery(GL_TIME_ELAPSED);
 
     glBeginQuery(GL_TIME_ELAPSED, renderer->fx_query);
+    if(renderer->bloom_enabled)
+    {
+        // pingpong blur
+        bool horizontal = true;
+        // first pass reads from bloom_bright, subsequent passes ping-pong between bloom_tex[0/1]
+        glActiveTexture(GL_TEXTURE0);
+        shader_use(&renderer->bloom_blur_shader);
+        shader_set_int(&renderer->bloom_blur_shader, "u_image", 0);
+        for(int i = 0; i < renderer->bloom_blur_passes * 2; i++)
+        {
+            glBindFramebuffer(GL_FRAMEBUFFER, renderer->bloom_fbo[horizontal]);
+            shader_set_bool(&renderer->bloom_blur_shader, "u_horizontal", horizontal);
+            glBindTexture(GL_TEXTURE_2D, i == 0 ? renderer->bloom_bright : renderer->fx_bloom[!horizontal]);
+            glBindVertexArray(renderer->quad_VAO);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+            horizontal = !horizontal;
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
     // postFX pass
     glClear(GL_COLOR_BUFFER_BIT);
     glDisable(GL_DEPTH_TEST);
     shader_use(&renderer->fx_shader);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, renderer->fx_scene);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, renderer->fx_depth);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, renderer->bloom_enabled ? renderer->fx_bloom[0] : 0);
     glBindVertexArray(renderer->quad_VAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glEnable(GL_DEPTH_TEST);
@@ -293,6 +328,7 @@ void renderer_postfx_reload(Renderer* renderer)
     shader_use(&renderer->fx_shader);
     shader_set_int(&renderer->fx_shader, "fx_scene", 0);
     shader_set_int(&renderer->fx_shader, "fx_depth", 1);
+    shader_set_int(&renderer->fx_shader, "fx_bloom", 2);
 }
 
 void renderer_postfx_update(Renderer* renderer)
@@ -313,6 +349,8 @@ void renderer_postfx_update(Renderer* renderer)
     shader_set_float(&renderer->fx_shader, "u_vignette_strength", renderer->vignette_strength);
     shader_set_bool(&renderer->fx_shader, "u_chromatic_aberration_enabled", renderer->CA_enabled);
     shader_set_float(&renderer->fx_shader, "u_chromatic_aberration_strength", renderer->CA_strength);
+    shader_set_bool(&renderer->fx_shader, "u_bloom_enabled", renderer->bloom_enabled);
+    shader_set_float(&renderer->fx_shader, "u_bloom_strength", renderer->bloom_strength);
 }
 
 const char* gbuffer_options[] = {
@@ -362,13 +400,19 @@ void renderer_ui(Renderer* renderer)
         igSliderFloat("Gamma", &renderer->gamma, 0.0f, 3.0f, "%.1f", 0);
         igSliderFloat("Exposure", &renderer->exposure, 0.0f, 2.0f, "%.1f", 0);
         igSliderFloat("Brightness", &renderer->brightness, 0.0f, 2.0f, "%.1f", 0);
-        igCheckbox("Enable vignette", &renderer->vignette_enabled);
+        igCheckbox("Vignette", &renderer->vignette_enabled);
         if(renderer->vignette_enabled)
             igSliderFloat("Vignette strength", &renderer->vignette_strength, 0.0f, 2.0f, "%.1f", 0);
-        igCheckbox("Enable chromatic aberration", &renderer->CA_enabled);
+        igCheckbox("Chromatic aberration", &renderer->CA_enabled);
         if(renderer->CA_enabled)
             igSliderFloat("Chromatic aberration strength", &renderer->CA_strength, 0.0f, 4.0f, "%.1f", 0);
-        igUnindent(8.0f);
+        igCheckbox("Bloom", &renderer->bloom_enabled);
+        if(renderer->bloom_enabled)
+        {
+            igSliderFloat("Bloom strength", &renderer->bloom_strength, 0.0f, 50.0f, "%.1f", 0);
+            igSliderFloat("Bloom threshold", &renderer->bloom_threshold, 0.0f, 50.0f, "%.1f", 0);
+            igSliderInt("Bloom blur passes", &renderer->bloom_blur_passes, 0, 250, "%d", 0);
+        }
     }
     igEnd();
 }
@@ -458,15 +502,47 @@ static inline void postFX_setup(Renderer* renderer, int w, int h)
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderer->fx_scene, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    glGenTextures(1, &renderer->g_depth);
-    glBindTexture(GL_TEXTURE_2D, renderer->g_depth);
+    // used in forward rendering
+    glGenTextures(1, &renderer->fx_depth);
+    glBindTexture(GL_TEXTURE_2D, renderer->fx_depth);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, renderer->g_depth, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, renderer->fx_depth, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
 
+    // bloom brightness extractor
+    glGenTextures(1, &renderer->bloom_bright);
+    glBindTexture(GL_TEXTURE_2D, renderer->bloom_bright);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, renderer->bloom_bright, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    GLuint attachments[] = {
+        GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1
+    };
+    glDrawBuffers(sizeof(attachments) / sizeof(GLuint), attachments);
+
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // ping-pong blur fbos
+    glGenFramebuffers(2, renderer->bloom_fbo);
+    glGenTextures(2, renderer->fx_bloom);
+    for(int i = 0; i < 2; i++)
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, renderer->bloom_fbo[i]);
+        glBindTexture(GL_TEXTURE_2D, renderer->fx_bloom[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderer->fx_bloom[i], 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
 }
 
 static inline void gbuffer_update(Renderer* renderer, int w, int h)
@@ -509,13 +585,31 @@ static inline void gbuffer_update(Renderer* renderer, int w, int h)
 static inline void postFX_update(Renderer* renderer, int w, int h)
 {
     glBindFramebuffer(GL_FRAMEBUFFER, renderer->fx_fbo);
-
     // all of gbuffer's lighting calculations
     glBindTexture(GL_TEXTURE_2D, renderer->fx_scene);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
     glBindTexture(GL_TEXTURE_2D, 0);
 
+    // used in forward
+    glBindTexture(GL_TEXTURE_2D, renderer->fx_depth);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // bloom brightness update
+    glBindTexture(GL_TEXTURE_2D, renderer->bloom_bright);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // bloom blur update
+    for(int i = 0; i < 2; i++)
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, renderer->bloom_fbo[i]);
+        glBindTexture(GL_TEXTURE_2D, renderer->fx_bloom[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
 }
 
 static inline void renderer_model_draw(const Model* model, Renderer* renderer, mat4 world_matrix)

@@ -81,6 +81,17 @@ typedef struct Renderer
     bool CA_enabled;
     float CA_strength;
 
+    // bloom
+    GLuint bloom_fbo[2]; // pingpong fbos
+    GLuint fx_bloom[2]; // bloom tex
+    GLuint bloom_bright; // scene brightness
+    Shader bloom_blur_shader;
+    // bloom settings
+    int bloom_blur_passes;
+    float bloom_threshold;
+    float bloom_strength;
+    bool bloom_enabled;
+
     // the drawing quad + shaders
     GLuint quad_VAO;
     GLuint quad_VBO;

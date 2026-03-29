@@ -298,7 +298,7 @@ void world_ui(World* world)
 
                 bool visible = renderable_has_flag(rc, RENDER_FLAG_VISIBLE);
                 bool wireframe = renderable_has_flag(rc, RENDER_FLAG_WIREFRAME);
-                bool culling = !renderable_has_flag(rc, RENDER_FLAG_CULL);
+                bool culling = renderable_has_flag(rc, RENDER_FLAG_CULL);
 
                 if (igCheckbox("Visible", &visible))
                     renderable_toggle_flag(rc, RENDER_FLAG_VISIBLE);
