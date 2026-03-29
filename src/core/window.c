@@ -22,7 +22,6 @@ void window_init(Window* window, int32_t w, int32_t h)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	glfwWindowHint(GLFW_SAMPLES, 4);
 
 	int32_t width, height;
 	// if argument width or height was not set fallback to default 1600x900

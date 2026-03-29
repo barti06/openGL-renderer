@@ -76,10 +76,10 @@ void main()
     vec3 emissive_map = u_has_emissive ? pow(texture(u_emissive, emissive_uvs).rgb, vec3(2.2)) * u_emissive_factor * u_emissive_strength : u_emissive_factor * u_emissive_strength;
     g_emissive = vec4(emissive_map, 1.0);
 
-    // grab the normal texture and convert from NDC
-    vec3 normal = u_has_normal ? texture(u_normal, v_uv * u_normal_scale).rgb * 2.0 - 1.0 : vec3(0.0);
+    // grab normals and convert to ndc or use vertex normals as fallback
+    vec3 normal = u_has_normal ? normalize(v_TBN * (texture(u_normal, v_uv * u_normal_scale).rgb * 2.0 - 1.0)) : normalize(v_TBN[2]);
     // send normal
-    g_normal = vec4(normalize(v_TBN * normal),1.0);
+    g_normal = vec4(normal,1.0);
 
     // get ao
     vec2 ao_uvs = u_has_occlusion_texcoord ? v_uv2 : v_uv;

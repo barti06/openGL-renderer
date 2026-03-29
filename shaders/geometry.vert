@@ -16,13 +16,12 @@ uniform mat4 u_projection;
 
 void main()
 {
-    // fragment in world position and camera's view direction
-    vec4 world_pos = u_view * u_model * vec4(aPos, 1.0);
+    // fragment in world position
+    vec4 world_pos = u_model * vec4(aPos, 1.0);
     v_fragment_pos = world_pos.xyz;
     
-
     // normal matrix for tbn calculation
-    mat3 normal_mat = transpose(inverse(mat3(u_view * u_model)));
+    mat3 normal_mat = transpose(inverse(mat3(u_model)));
 
     // tbn matrix calculation
     vec3 T = normalize(normal_mat * aTangent.xyz); // tangent
@@ -34,5 +33,5 @@ void main()
     v_uv = aUv;
     v_uv2 = aUv2;
 
-    gl_Position = u_projection * world_pos;
+    gl_Position = u_projection * u_view * world_pos;
 }

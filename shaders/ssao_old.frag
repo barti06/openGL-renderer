@@ -3,20 +3,21 @@ out float fragColor;
 
 in vec2 v_uv;
 
+uniform mat4 u_view;
+
 uniform sampler2D g_position;
 uniform sampler2D g_normal;
 uniform sampler2D g_depth;
 uniform sampler2D u_noise;
 
-uniform vec3 u_samples[64];
+uniform vec3 u_samples[16];
 uniform mat4 u_projection;
-uniform mat4 u_view;
 uniform vec2 u_noise_scale;  // usually one fourth of screen size
-uniform float u_radius = 0.5;
-uniform float u_bias = 0.01;
+uniform float u_radius = 0.3;
+uniform float u_bias = 0.025;
 uniform float u_strength = 1.3;
 
-const int KERNEL_SIZE = 64;
+const int KERNEL_SIZE = 16;
 
 void main()
 {
@@ -29,8 +30,12 @@ void main()
     }
 
     // get fragment pos and normal
-    vec3 frag_pos = texture(g_position, v_uv).xyz; 
-    vec3 normal = texture(g_normal, v_uv).xyz;
+    vec3 frag_pos_world = texture(g_position, v_uv).xyz; 
+    vec3 normal_world = texture(g_normal, v_uv).xyz;
+
+    vec3 frag_pos = vec3(u_view * vec4(frag_pos_world, 1.0));
+
+    vec3 normal = normalize(mat3(u_view) * normal_world);
 
     // tile the noise texture across the screen
     vec3 random = normalize(texture(u_noise, v_uv * u_noise_scale).rgb);
@@ -53,9 +58,8 @@ void main()
         offset.xyz /= offset.w;
         offset.xyz = offset.xyz * 0.5 + 0.5;
 
-        vec3 sample_world = texture(g_position, offset.xy).rgb;
-        // get the actual depth at the sample's screen position
-        float sample_depth = texture(g_position, offset.xy).z;
+        // get the current depth at the sample's screen position
+        float sample_depth = vec4(u_view * texture(g_position, offset.xy)).z;
 
         // only count occlusion from nearby geometry
         float range_check = smoothstep(0.0, 1.0, u_radius / abs(frag_pos.z - sample_depth));
@@ -65,6 +69,6 @@ void main()
     }
 
     // 1.0 is no occlusion and 0.0 is fully occluded
-    occlusion = 1.0 - (occlusion / float(KERNEL_SIZE)) * u_strength;
+    occlusion = 1.0 - (occlusion / KERNEL_SIZE) * u_strength;
     fragColor = occlusion;
 }

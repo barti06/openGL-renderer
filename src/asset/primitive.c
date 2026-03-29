@@ -30,7 +30,6 @@ int primitive_load(Primitive* model_primitive, cgltf_primitive *src, const char 
     for (uint64_t attribute_index = 0; attribute_index < src->attributes_count; attribute_index++)
     {
         cgltf_attribute* attribute = &src->attributes[attribute_index];
-        
         // pass primitive positions to gpu
         if(attribute->type == cgltf_attribute_type_position)
             ok &= upload_accessor_float(attribute->data, model_primitive->VBO_positions, 0, 3);

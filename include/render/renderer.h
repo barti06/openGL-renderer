@@ -22,6 +22,7 @@ typedef enum
     GBUFFER_METALNESS,
     GBUFFER_EMISSIVE,
     GBUFFER_DEPTH,
+    GBUFFER_BLOOM_NOBLUR,
     GBUFFER_MAX
 } gbufferView_t;
 
@@ -39,7 +40,7 @@ typedef struct Renderer
     Shader* active_shader;
     Shader deferred_shader;
     Shader forward_shader;
-    Shader depth_shader; // for depth prepass on fwd rendering
+    //Shader depth_shader; // for depth prepass on fwd rendering (NO LONGER USED)
 
     vec2 viewportSize;
     float nearZ;
@@ -106,6 +107,8 @@ typedef struct Renderer
     float ssao_radius;
     float ssao_bias;
     float ssao_strength;
+    int hbao_directions;
+    int hbao_steps;
     bool ssao_enabled;
     Shader ssao_shader;
     Shader ssao_blur_shader;

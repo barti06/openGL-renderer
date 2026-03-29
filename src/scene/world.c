@@ -299,6 +299,7 @@ void world_ui(World* world)
                 bool visible = renderable_has_flag(rc, RENDER_FLAG_VISIBLE);
                 bool wireframe = renderable_has_flag(rc, RENDER_FLAG_WIREFRAME);
                 bool culling = renderable_has_flag(rc, RENDER_FLAG_CULL);
+                bool blending = renderable_has_flag(rc, RENDER_FLAG_BLEND);
 
                 if (igCheckbox("Visible", &visible))
                     renderable_toggle_flag(rc, RENDER_FLAG_VISIBLE);
@@ -306,6 +307,8 @@ void world_ui(World* world)
                     renderable_toggle_flag(rc, RENDER_FLAG_WIREFRAME);
                 if (igCheckbox("Culling",   &culling))
                     renderable_toggle_flag(rc, RENDER_FLAG_CULL);
+                if (igCheckbox("Blending", &blending))
+                    renderable_toggle_flag(rc, RENDER_FLAG_BLEND);
 
                 if (rc->model)
                 {

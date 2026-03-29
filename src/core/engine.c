@@ -18,7 +18,7 @@ void engine_init(Engine *engine, int argc, char *argv[])
 {
     int32_t w = 0;
     int32_t h = 0;
-    pipeline_t pipeline = PIPELINE_FORWARD;
+    pipeline_t pipeline = PIPELINE_DEFERRED;
 
     for(int i = 1; i < argc; i++)
     {
@@ -28,9 +28,9 @@ void engine_init(Engine *engine, int argc, char *argv[])
         if(!strcmp(argv[i], "-h") || !strcmp(argv[i], "--height"))
             h = atoi(argv[i + 1]);
         if(!strcmp(argv[i], "-f") || !strcmp(argv[i], "--forward"))
-            continue;
+            pipeline = PIPELINE_FORWARD;
         if(!strcmp(argv[i], "-d") || !strcmp(argv[i], "--deferred"))
-            pipeline = PIPELINE_DEFERRED;
+            continue;
     }
 
     Window *win = &engine->window;
@@ -153,6 +153,7 @@ static inline void engine_draw(Engine* engine)
 static inline void shader_update_light(Shader* shader, World* wl, int32_t index, int32_t* point_ind, int32_t* spot_ind)
 {
     char uniform_name[32];
+
     switch(wl->lights[index].light_type)
     {
         case LIGHT_TYPE_POINT:

@@ -53,7 +53,6 @@ void renderer_init(Renderer* renderer, pipeline_t pipeline, int viewportX,
 	}
 
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glEnable(GL_MULTISAMPLE);
 
     renderer->nearZ = DEFAULT_NEARZ;
     renderer->farZ = DEFAULT_FARZ;
@@ -93,7 +92,7 @@ void renderer_init(Renderer* renderer, pipeline_t pipeline, int viewportX,
     // bloom shaders
     shader_init(&renderer->bloom_blur_shader, "shaders/quad.vert", "shaders/bloom_blur.frag");
     //ssao shaders
-    shader_init(&renderer->ssao_shader, "shaders/quad.vert", "shaders/ssao.frag");
+    shader_init(&renderer->ssao_shader, "shaders/quad.vert", "shaders/hbao.frag");
     shader_init(&renderer->ssao_blur_shader, "shaders/quad.vert", "shaders/ssao_blur.frag");
     
     // init fbos
@@ -159,21 +158,11 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
     shader_set_mat4(renderer->active_shader, "u_view", world->camera.view);
     shader_set_mat4(renderer->active_shader, "u_projection", world->camera.projection);
 
-    switch(renderer->render_mode)
-    {   
-        case PIPELINE_DEFERRED:
-        shader_use(&renderer->light_shader);
-        shader_set_vec3(&renderer->light_shader, "u_camera_position", world->camera.position);
-        shader_set_int(&renderer->light_shader, "u_gbuffer_view", (int32_t)renderer->gbuffer_view);
-        shader_set_float(&renderer->light_shader, "u_bloom_threshold", renderer->bloom_threshold);
-        break;
-        case PIPELINE_FORWARD:
-        shader_use(&renderer->forward_shader);
-        shader_set_vec3(&renderer->forward_shader, "u_camera_position", world->camera.position);
-        shader_set_float(&renderer->forward_shader, "u_bloom_threshold", renderer->bloom_threshold);
-        default:
-        break;
-    }
+    shader_use(&renderer->light_shader);
+    shader_set_vec3(&renderer->light_shader, "u_camera_position", world->camera.position);
+    shader_set_int(&renderer->light_shader, "u_gbuffer_view", renderer->gbuffer_view);
+    shader_set_float(&renderer->light_shader, "u_bloom_threshold", renderer->bloom_threshold);
+    shader_set_bool(&renderer->light_shader, "u_ssao_enabled", renderer->ssao_enabled);
 
     shader_use(&renderer->ssao_shader);
     shader_set_mat4(&renderer->ssao_shader, "u_view", world->camera.view);
@@ -181,6 +170,9 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
     shader_set_float(&renderer->ssao_shader, "u_radius", renderer->ssao_radius);
     shader_set_float(&renderer->ssao_shader, "u_bias", renderer->ssao_bias);
     shader_set_float(&renderer->ssao_shader, "u_strength", renderer->ssao_strength);
+    shader_set_int(&renderer->ssao_shader, "u_directions", renderer->hbao_directions);
+    shader_set_int(&renderer->ssao_shader, "u_steps", renderer->hbao_steps);
+    shader_set_vec2(&renderer->ssao_shader, "u_viewport_size", renderer->viewportSize);
 
     renderer_postfx_update(renderer);
     // update the camera
@@ -192,23 +184,13 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     glViewport(0, 0, renderer->viewportSize[0], renderer->viewportSize[1]);
     
     glBeginQuery(GL_TIME_ELAPSED, renderer->geometry_query);
-    switch(renderer->render_mode)
-    {
-        case PIPELINE_DEFERRED:
-        glBindFramebuffer(GL_FRAMEBUFFER, renderer->gBuffer_fbo); // for geometry pass
-        break;
-        case PIPELINE_FORWARD:
-        glBindFramebuffer(GL_FRAMEBUFFER, renderer->fx_fbo);
-        break;
-        default:
-        break;
-    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->gBuffer_fbo); // for geometry pass
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     for(size_t index = 0; index < world->entities_count; index++)
     {
-        uint32_t needed = COMPONENT_TRANSFORM | COMPONENT_RENDERABLE;
-        if (!entity_has_component(&world->entities[index], needed))
+        if (!entity_has_component(&world->entities[index], COMPONENT_RENDERABLE))
             continue;
 
         RenderableComponent* rc = &world->renderables[index];
@@ -234,73 +216,68 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glEndQuery(GL_TIME_ELAPSED);
 
-    if(renderer->render_mode == PIPELINE_DEFERRED)
-    {
-        // ssao pass
-        glBeginQuery(GL_TIME_ELAPSED, renderer->ssao_query);
-        glBindFramebuffer(GL_FRAMEBUFFER, renderer->ssao_fbo);
-        glClear(GL_COLOR_BUFFER_BIT);
-        shader_use(&renderer->ssao_shader);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, renderer->g_position);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, renderer->g_normal);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, renderer->g_depth);
-        glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, renderer->ssao_noise_texture);
-        glBindVertexArray(renderer->quad_VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glEndQuery(GL_TIME_ELAPSED);
+    // ssao pass
+    glBeginQuery(GL_TIME_ELAPSED, renderer->ssao_query);
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->ssao_fbo);
+    glClear(GL_COLOR_BUFFER_BIT);
+    shader_use(&renderer->ssao_shader);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, renderer->g_position);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, renderer->g_normal);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, renderer->g_depth);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, renderer->ssao_noise_texture);
+    glBindVertexArray(renderer->quad_VAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glEndQuery(GL_TIME_ELAPSED);
 
-        // ssao blur pass
-        glBeginQuery(GL_TIME_ELAPSED, renderer->ssao_blur_query);
-        glBindFramebuffer(GL_FRAMEBUFFER, renderer->ssao_blur_fbo);
-        glClear(GL_COLOR_BUFFER_BIT);
-        shader_use(&renderer->ssao_blur_shader);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, renderer->ssao_texture);
-        glBindVertexArray(renderer->quad_VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glEndQuery(GL_TIME_ELAPSED);
+    // ssao blur pass
+    glBeginQuery(GL_TIME_ELAPSED, renderer->ssao_blur_query);
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->ssao_blur_fbo);
+    glClear(GL_COLOR_BUFFER_BIT);
+    shader_use(&renderer->ssao_blur_shader);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, renderer->ssao_texture);
+    glBindVertexArray(renderer->quad_VAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glEndQuery(GL_TIME_ELAPSED);
 
-        // light pass
-        glBeginQuery(GL_TIME_ELAPSED, renderer->light_query);
-        glBindFramebuffer(GL_FRAMEBUFFER, renderer->fx_fbo);
-        shader_use(&renderer->light_shader);
-        glDisable(GL_DEPTH_TEST);
-        glClear(GL_COLOR_BUFFER_BIT);
-        // send pos texture
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, renderer->g_position);
-        // send normal texture
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, renderer->g_normal);
-        // send albedo texture
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, renderer->g_albedo);
-        // send ormt texture
-        glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, renderer->g_orm);
-        // send emissive texture
-        glActiveTexture(GL_TEXTURE4);
-        glBindTexture(GL_TEXTURE_2D, renderer->g_emissive);
-        // send depth texture
-        glActiveTexture(GL_TEXTURE5);
-        glBindTexture(GL_TEXTURE_2D, renderer->g_depth);
-        // send ssao texture
-        // send ssao texture (NEW)
-        glActiveTexture(GL_TEXTURE6);
-        glBindTexture(GL_TEXTURE_2D, renderer->ssao_blur_texture);
-        // render light pass to a quad
-        glBindVertexArray(renderer->quad_VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glEndQuery(GL_TIME_ELAPSED);
-        glEnable(GL_DEPTH_TEST);
-    }
+    // light pass
+    glBeginQuery(GL_TIME_ELAPSED, renderer->light_query);
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->fx_fbo);
+    shader_use(&renderer->light_shader);
+    glDisable(GL_DEPTH_TEST);
+    glClear(GL_COLOR_BUFFER_BIT);
+    // send pos texture
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, renderer->g_position);
+    // send normal texture
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, renderer->g_normal);
+    // send albedo texture
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, renderer->g_albedo);
+    // send ormt texture
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, renderer->g_orm);
+    // send emissive texture
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, renderer->g_emissive);
+    // send depth texture
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, renderer->g_depth);
+    // send ssao texture
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D, renderer->ssao_blur_texture);
+    // render light pass to a quad
+    glBindVertexArray(renderer->quad_VAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glEndQuery(GL_TIME_ELAPSED);
 
     glBeginQuery(GL_TIME_ELAPSED, renderer->fx_query);
     if(renderer->bloom_enabled)
@@ -325,7 +302,6 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
 
     // postFX pass
     glClear(GL_COLOR_BUFFER_BIT);
-    glDisable(GL_DEPTH_TEST);
     shader_use(&renderer->fx_shader);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, renderer->fx_scene);
@@ -373,7 +349,7 @@ void renderer_gbuffer_reload(Renderer* renderer)
     shader_set_int(&renderer->light_shader, "g_orm", 3);
     shader_set_int(&renderer->light_shader, "g_emissive", 4);
     shader_set_int(&renderer->light_shader, "g_depth", 5);
-    shader_set_int(&renderer->light_shader, "g_ssao", 6);
+    shader_set_int(&renderer->light_shader, "ssao", 6);
 }
 void renderer_gbuffer_update(Renderer* renderer, vec3 camera_pos)
 {
@@ -423,7 +399,8 @@ const char* gbuffer_options[] = {
     "Roughness",
     "Metalness",
     "Emissive",
-    "Depth"
+    "Depth",
+    "Unblured bloom"
 };
 
 const char* tonemap_options[] = {
@@ -479,8 +456,10 @@ void renderer_ui(Renderer* renderer)
         igCheckbox("SSAO", &renderer->ssao_enabled);
         {
             igSliderFloat("SSAO strength", &renderer->ssao_strength, 0.0f, 20.0f, "%.1f", 0);
-            igSliderFloat("SSAO bias", &renderer->ssao_bias, 0.0f, 1.0f, "%.2f", 0);
+            igSliderFloat("SSAO bias", &renderer->ssao_bias, 0.0f, 1.0f, "%.3f", 0);
             igSliderFloat("SSAO radius", &renderer->ssao_radius, 0.0f, 10.0f, "%.1f", 0);
+            igSliderInt("SSAO directions", &renderer->hbao_directions, 0, 50, "%d", 0);
+            igSliderInt("SSAO steps", &renderer->hbao_steps, 0, 50, "%d", 0);
         }
     }
     igEnd();
@@ -683,10 +662,11 @@ static inline void postFX_update(Renderer* renderer, int w, int h)
 
 static inline void ssao_setup(Renderer* renderer, int w, int h)
 {
-    // generate kernel samples
     srand(42);
-    vec3 ssao_kernel[64];
-    for(int i = 0; i < 64; i++)
+    /* prev used in basic ssao
+    // generate kernel samples
+    vec3 ssao_kernel[16];
+    for(int i = 0; i < 16; i++)
     {
         vec3 sample = {
             (float)rand()/RAND_MAX * 2.0f - 1.0f,  // from -1 to 1
@@ -701,23 +681,18 @@ static inline void ssao_setup(Renderer* renderer, int w, int h)
         glm_vec3_scale(sample, scale, sample);
         glm_vec3_copy(sample, ssao_kernel[i]);
     }
+    */
 
     // generate 4x4 noise texture (tiled over screen to avoid banding)
     // noise rotates the kernel per-pixel to get more sample variety
-    vec3 ssao_noise[16];
-    for(int i = 0; i < 16; i++)
-    {
-        vec3 noise = {
-            (float)rand()/RAND_MAX * 2.0f - 1.0f,
-            (float)rand()/RAND_MAX * 2.0f - 1.0f,
-            0.0f  // rotation around z axis only
-        };
-        glm_vec3_copy(noise, ssao_noise[i]);
-    }
+    float ssao_noise[64];
+    for(int i = 0; i < 64; i++)
+        ssao_noise[i] = (float)rand() / RAND_MAX;
+
     // ssao noise tex
     glGenTextures(1, &renderer->ssao_noise_texture);
     glBindTexture(GL_TEXTURE_2D, renderer->ssao_noise_texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, 4, 4, 0, GL_RGB, GL_FLOAT, ssao_noise);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R16F, 4, 4, 0, GL_RED, GL_FLOAT, ssao_noise);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT); // enable tiling
@@ -748,9 +723,11 @@ static inline void ssao_setup(Renderer* renderer, int w, int h)
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    renderer->ssao_radius = 0.5f;
-    renderer->ssao_bias = 0.01f;
+    renderer->ssao_radius = 3.0f;
+    renderer->ssao_bias = 0.02f;
     renderer->ssao_strength = 1.3f;
+    renderer->hbao_directions = 8;
+    renderer->hbao_steps = 4;
     renderer->ssao_enabled = true;
 
     shader_use(&renderer->ssao_shader);
@@ -758,20 +735,22 @@ static inline void ssao_setup(Renderer* renderer, int w, int h)
     shader_set_int(&renderer->ssao_shader, "g_normal", 1);
     shader_set_int(&renderer->ssao_shader, "g_depth", 2);
     shader_set_int(&renderer->ssao_shader, "u_noise", 3);
-    for (int i = 0; i < 64; ++i) 
+    shader_set_int(&renderer->ssao_shader, "u_directions", renderer->hbao_directions);
+    shader_set_int(&renderer->ssao_shader, "u_steps", renderer->hbao_steps);
+    shader_set_vec2(&renderer->ssao_shader, "u_viewport_size", renderer->viewportSize);
+
+    /* prev used in basic ssao
+    for (int i = 0; i < 16; ++i) 
     {
-        char uniform_name[64];
+        char uniform_name[32];
         snprintf(uniform_name, sizeof(uniform_name), "u_samples[%d]", i);
         shader_set_vec3(&renderer->ssao_shader, uniform_name, ssao_kernel[i]);
     }
+    */
 }
 
 static inline void ssao_update(Renderer* renderer, int w, int h)
 {
-    //glBindTexture(GL_TEXTURE_2D, renderer->ssao_noise_texture);
-    //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, 4, 4, 0, GL_RGB, GL_FLOAT, ssao_noise);
-    //glBindTexture(GL_TEXTURE_2D, 0);
-
     // ssao fbo and tex
     glBindFramebuffer(GL_FRAMEBUFFER, renderer->ssao_fbo);
     glBindTexture(GL_TEXTURE_2D, renderer->ssao_texture);
@@ -786,9 +765,10 @@ static inline void ssao_update(Renderer* renderer, int w, int h)
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    float noise_scale_x = (float)renderer->viewportSize[0] / 4.0f;
-    float noise_scale_y = (float)renderer->viewportSize[1] / 4.0f;
+    float noise_scale_x = renderer->viewportSize[0] / 4.0f;
+    float noise_scale_y = renderer->viewportSize[1] / 4.0f;
     shader_set_vec2(&renderer->ssao_shader, "u_noise_scale", (vec2){noise_scale_x, noise_scale_y});
+    shader_set_vec2(&renderer->ssao_shader, "u_viewport_size", renderer->viewportSize);
 }
 
 static inline void renderer_model_draw(const Model* model, Renderer* renderer, mat4 world_matrix)
