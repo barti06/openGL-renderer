@@ -143,4 +143,8 @@ void camera_update_matrices(Camera* camera, vec2 viewportSize, float nearZ, floa
     glm_perspective(glm_rad(camera->fieldOfView), 
         (viewportSize[0] / viewportSize[1]), nearZ, 
         farZ, camera->projection);
+    
+    // update frustum
+    glm_mat4_mul(camera->projection, camera->view, camera->view_proj);
+    glm_frustum_planes(camera->view_proj, camera->frustum);
 }

@@ -4,6 +4,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#include <float.h>
+#include <cglm/cglm.h>
 
 int model_load(Model* model, const char* location)
 {    
@@ -101,6 +103,8 @@ int model_load(Model* model, const char* location)
 
         cgltf_mesh* src_mesh = src_node->mesh;
         Mesh* dest_mesh = &model->meshes[model->mesh_count];
+        glm_vec3_fill(dest_mesh->aabb[0], FLT_MAX);
+        glm_vec3_fill(dest_mesh->aabb[1], -FLT_MAX);
 
         cgltf_node_transform_world(src_node, (float*)dest_mesh->transform);
 
@@ -127,7 +131,10 @@ int model_load(Model* model, const char* location)
                 continue;
         
             Primitive* dest_primitive = &dest_mesh->primitives[dest_mesh->primitive_count];
- 
+
+            glm_vec3_minv(dest_mesh->aabb[0], src_primitive->attributes->data->min, dest_mesh->aabb[0]);
+            glm_vec3_maxv(dest_mesh->aabb[1], src_primitive->attributes->data->max, dest_mesh->aabb[1]);
+
             if (!primitive_load(dest_primitive, src_primitive, base_path, &texture_cache))
             {
                 log_error("ERROR... model_load() SAYS: primitive_load FAILED AT NODE %zu PRIM %zu", ni, pi);

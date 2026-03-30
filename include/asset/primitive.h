@@ -113,6 +113,8 @@ typedef struct Mesh
     mat4 transform;
     Primitive* primitives;
     uint32_t primitive_count;
+    // 0 is min 1 is max
+    vec3 aabb[2];
 } Mesh;
 
 int primitive_load(Primitive* model_primitive, cgltf_primitive* src, const char* base_path, TextureCache* cache);

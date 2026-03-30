@@ -38,6 +38,8 @@ typedef struct Camera
     
     mat4 view;
     mat4 projection;
+    mat4 view_proj;
+    vec4 frustum[6];
     
     int fov;
 } Camera;
@@ -49,4 +51,6 @@ void camera_process_movement(Camera* camera, float delta_time, InputType input_t
 void camera_process_rotation(Camera* camera, float xoffset, float yoffset);
 
 void camera_update_matrices(Camera* camera, vec2 viewportSize, float nearZ, float farZ);
+
+//bool camera_is_in_frustum(Camera *camera, vec3 center);
 #endif

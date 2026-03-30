@@ -40,6 +40,15 @@ target_sources(${PROJECT_NAME} PRIVATE
     src/core/ui.c
 )
 
+# my header files
+target_include_directories(${PROJECT_NAME} PUBLIC 
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/asset
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/render
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/scene
+)
+
 # use std C11
 target_compile_features(${PROJECT_NAME} PRIVATE c_std_11)
 
@@ -51,11 +60,11 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     
     # release optimizations
     $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>>:
-        -O3 -march=native -ffast-math -funroll-loops -fomit-frame-pointer>
+        -O3 -mavx2 -mfma -ffast-math -funroll-loops -fomit-frame-pointer>
     $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,MSVC>>:
-        /O2 /fp:fast /GL>
+        /O2 /fp:fast /GL /arch:AVX2>
 
-    # debug anti optimizations
+    # debug 'anti' optimizations
     $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>>:
         -g -O0 -fno-omit-frame-pointer>
     $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANG_AND_ID:C,MSVC>>:
@@ -73,15 +82,6 @@ if(ipo_supported)
 else()
     message(STATUS "ERROR... INTERPROCEDULAR OPTIMIZATION NOT SUPPORTED: ${ipo_error}")
 endif()
-
-# my header files
-target_include_directories(${PROJECT_NAME} PUBLIC 
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/asset
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/core
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/render
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/scene
-)
 
 # include glfw
 set(GLFW_BUILD_EXAMPLES OFF CACHE INTERNAL "")

@@ -24,7 +24,7 @@ static inline void gbuffer_update(Renderer* renderer, int w, int h);
 
 static inline void postFX_update(Renderer* renderer, int w, int h);
 
-static inline void renderer_model_draw(const Model* model, Renderer* renderer, mat4 world_matrix);
+static inline void renderer_model_draw(const Model* model, Renderer* renderer, mat4 world_matrix, Camera *camera);
 
 static inline void renderer_get_light(Renderer* renderer, LightComponent* lc, vec3 position);
 
@@ -204,7 +204,7 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
         if(renderable_has_flag(rc, RENDER_FLAG_BLEND))
             glEnable(GL_BLEND);
 
-        renderer_model_draw(rc->model, renderer, world->transforms[index].world_matrix);
+        renderer_model_draw(rc->model, renderer, world->transforms[index].world_matrix, &world->camera);
 
         if (!renderable_has_flag(rc, RENDER_FLAG_CULL))
             glEnable(GL_CULL_FACE);
@@ -765,13 +765,13 @@ static inline void ssao_update(Renderer* renderer, int w, int h)
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    float noise_scale_x = renderer->viewportSize[0] / 4.0f;
-    float noise_scale_y = renderer->viewportSize[1] / 4.0f;
+    float noise_scale_x = renderer->viewportSize[0] / 2.0f;
+    float noise_scale_y = renderer->viewportSize[1] / 2.0f;
     shader_set_vec2(&renderer->ssao_shader, "u_noise_scale", (vec2){noise_scale_x, noise_scale_y});
     shader_set_vec2(&renderer->ssao_shader, "u_viewport_size", renderer->viewportSize);
 }
 
-static inline void renderer_model_draw(const Model* model, Renderer* renderer, mat4 world_matrix)
+static inline void renderer_model_draw(const Model* model, Renderer* renderer, mat4 world_matrix, Camera *camera)
 {
     if (!model || !model->is_loaded || !model->meshes)
         return;
@@ -780,15 +780,16 @@ static inline void renderer_model_draw(const Model* model, Renderer* renderer, m
 
     // activate the shader
     shader_use(shader);
-
     // draw each primitive from a model
     for (uint32_t mi = 0; mi < model->mesh_count; mi++)
     {
         const Mesh* mesh = &model->meshes[mi];
+        if (!glm_aabb_frustum(mesh->aabb, camera->frustum))
+            continue;
 
         // multiply each model's mesh matrix by the world matrix of the entity that owns them
         mat4 final_transform;
-        // avx makes EVERYTHING explode and i am too lazy to be bothered :D
+        // avx makes EVERYTHING explode and i am too lazy to be bothered to fix it :D
         glm_mat4_mul_sse2(world_matrix, (vec4*)mesh->transform, final_transform);
 
         shader_set_mat4(shader, "u_model", final_transform);
