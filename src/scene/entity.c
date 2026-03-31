@@ -149,19 +149,7 @@ LightComponent light_init_spot(void)
  
     return l;
 }
- 
-LightComponent light_init_directional(void)
-{
-    LightComponent l;
-    memset(&l, 0, sizeof(l));
- 
-    l.light_type = LIGHT_TYPE_DIRECTIONAL;
-    l.intensity  = 1.0f;
- 
-    glm_vec3_one(l.lights.directional.diffuse);
- 
-    return l;
-}
+
 
 void shader_add_light(Shader* shader, LightComponent* lc, vec3 position, uint32_t index)
 {

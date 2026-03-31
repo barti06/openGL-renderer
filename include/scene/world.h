@@ -29,6 +29,11 @@ typedef struct World
 
     Camera camera;
     worldEvent_t current_event;
+    DirectionalLight directional;
+    vec3 dirlight_dir;
+    float dirlight_inten;
+    bool enable_directional_light;
+    bool update_shadow;
 } World;
 
 // heap allocates a world (they are very heavy to always have on stack)

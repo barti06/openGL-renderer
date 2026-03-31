@@ -2,6 +2,7 @@
 #define RENDERER_H
 
 #include "shader.h"
+#include "shadows.h"
 
 typedef enum
 {
@@ -23,15 +24,9 @@ typedef enum
     GBUFFER_EMISSIVE,
     GBUFFER_DEPTH,
     GBUFFER_BLOOM_NOBLUR,
+    GBUFFER_SHADOW,
     GBUFFER_MAX
 } gbufferView_t;
-
-typedef enum
-{
-    PIPELINE_FORWARD,
-    PIPELINE_DEFERRED,
-    PIPELINE_MAX
-} pipeline_t;
 
 typedef struct World World;
 
@@ -39,8 +34,7 @@ typedef struct Renderer
 {
     Shader* active_shader;
     Shader deferred_shader;
-    Shader forward_shader;
-    //Shader depth_shader; // for depth prepass on fwd rendering (NO LONGER USED)
+    Shader shadowMap_shader;
 
     vec2 viewportSize;
     float nearZ;
@@ -76,7 +70,6 @@ typedef struct Renderer
     float stats_fps;
 
     // various rendering related settings
-    pipeline_t render_mode;
     gbufferView_t gbuffer_view;
     tonemap_t tonemap;
     float gamma;
@@ -113,13 +106,15 @@ typedef struct Renderer
     Shader ssao_shader;
     Shader ssao_blur_shader;
 
+    shadowMap_t shadow;
+
     // the drawing quad + shaders
     GLuint quad_VAO;
     GLuint quad_VBO;
     Shader fx_shader;
 } Renderer;
 
-void renderer_init(Renderer* renderer, pipeline_t pipeline, 
+void renderer_init(Renderer* renderer, 
     int viewportX, int viewportY);
 void renderer_draw_world(World* world, Renderer* renderer, double delta_time);
 void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY);

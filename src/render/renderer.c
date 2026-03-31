@@ -28,6 +28,8 @@ static inline void renderer_model_draw(const Model* model, Renderer* renderer, m
 
 static inline void renderer_get_light(Renderer* renderer, LightComponent* lc, vec3 position);
 
+static inline void renderer_model_simpleDraw(const Model* model, Shader *shader, mat4 world_matrix);
+
 static inline void ssao_setup(Renderer* renderer, int w, int h);
 
 static inline void ssao_update(Renderer* renderer, int w, int h);
@@ -43,7 +45,7 @@ float quadVertices[] = {
          1.0f,  1.0f,  1.0f, 1.0f
 };
 
-void renderer_init(Renderer* renderer, pipeline_t pipeline, int viewportX,
+void renderer_init(Renderer* renderer, int viewportX,
     int viewportY)
 {
     // load glad
@@ -60,20 +62,10 @@ void renderer_init(Renderer* renderer, pipeline_t pipeline, int viewportX,
     renderer->viewportSize[1] = viewportY;
     // init deferred and forward shaders
 	shader_init(&renderer->deferred_shader, "shaders/geometry.vert", "shaders/deferred.frag");
-    shader_init(&renderer->forward_shader, "shaders/geometry.vert", "shaders/forward.frag");
-    // set the active shader
-    switch(pipeline)
-    {
-        case PIPELINE_DEFERRED:
-        renderer->active_shader = &renderer->deferred_shader;
-        break;
-        case PIPELINE_FORWARD:
-        renderer->active_shader = &renderer->forward_shader;
-        break;
-        default:
-        break;
-    }
-    renderer->render_mode = pipeline;
+    shader_init(&renderer->shadowMap_shader, "shaders/geometry_shadowMap.vert", "shaders/shadowMap.frag");
+
+    renderer->active_shader = &renderer->deferred_shader;
+
 
     // generate main quad vao and vbo
     glGenVertexArrays(1, &renderer->quad_VAO);
@@ -109,6 +101,7 @@ void renderer_init(Renderer* renderer, pipeline_t pipeline, int viewportX,
     shader_set_int(&renderer->light_shader, "g_emissive", 4);
     shader_set_int(&renderer->light_shader, "g_depth", 5);
     shader_set_int(&renderer->light_shader, "ssao", 6);
+    shader_set_int(&renderer->light_shader, "u_shadowMap", 7);
 
     // init post processing shader
     shader_use(&renderer->fx_shader);
@@ -137,6 +130,8 @@ void renderer_init(Renderer* renderer, pipeline_t pipeline, int viewportX,
     renderer->bloom_threshold = 0.2f;
     renderer->bloom_strength = 1.0f;
     renderer->bloom_blur_passes = 5;
+
+    shadowMap_init(&renderer->shadow);
 }
 
 void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY)
@@ -146,8 +141,7 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
         renderer->viewportSize[0] = windowX;
         renderer->viewportSize[1] = windowY;
 
-        if(renderer->render_mode == PIPELINE_DEFERRED)
-            gbuffer_update(renderer, renderer->viewportSize[0], renderer->viewportSize[1]);
+        gbuffer_update(renderer, renderer->viewportSize[0], renderer->viewportSize[1]);
 
         ssao_update(renderer, renderer->viewportSize[0], renderer->viewportSize[1]);
         postFX_update(renderer, renderer->viewportSize[0], renderer->viewportSize[1]);
@@ -181,11 +175,31 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
 
 void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
 {
-    glViewport(0, 0, renderer->viewportSize[0], renderer->viewportSize[1]);
-    
-    glBeginQuery(GL_TIME_ELAPSED, renderer->geometry_query);
+    // shadow pass
+    if(world->update_shadow)
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, renderer->shadow.fbo);
+        shadowMap_pass(&renderer->shadowMap_shader, &renderer->shadow, world->dirlight_dir);
+        for(size_t index = 0; index < world->entities_count; index++)
+        {
+            if (!entity_has_component(&world->entities[index], COMPONENT_RENDERABLE))
+                continue;
 
-    glBindFramebuffer(GL_FRAMEBUFFER, renderer->gBuffer_fbo); // for geometry pass
+            RenderableComponent* rc = &world->renderables[index];
+            if (!renderable_has_flag(rc, RENDER_FLAG_VISIBLE))
+                continue;
+
+            glDisable(GL_CULL_FACE);
+            renderer_model_simpleDraw(rc->model, &renderer->shadowMap_shader, world->transforms[index].world_matrix);
+            glEnable(GL_CULL_FACE);
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        world->update_shadow = false;
+    }
+    // gpass
+    glViewport(0, 0, renderer->viewportSize[0], renderer->viewportSize[1]);
+    glBeginQuery(GL_TIME_ELAPSED, renderer->geometry_query);
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->gBuffer_fbo);
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     for(size_t index = 0; index < world->entities_count; index++)
@@ -273,6 +287,10 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     // send ssao texture
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D, renderer->ssao_blur_texture);
+    // send shadow
+    glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D, renderer->shadow.tex);
+    shadowMap_send(&renderer->light_shader, 7, &renderer->shadow);
     // render light pass to a quad
     glBindVertexArray(renderer->quad_VAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -280,6 +298,7 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     glEndQuery(GL_TIME_ELAPSED);
 
     glBeginQuery(GL_TIME_ELAPSED, renderer->fx_query);
+    // bloom pass (should make a query 4 it)
     if(renderer->bloom_enabled)
     {
         // pingpong blur
@@ -296,8 +315,8 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
             glBindVertexArray(renderer->quad_VAO);
             glDrawArrays(GL_TRIANGLES, 0, 6);
             horizontal = !horizontal;
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
     // postFX pass
@@ -400,7 +419,8 @@ const char* gbuffer_options[] = {
     "Metalness",
     "Emissive",
     "Depth",
-    "Unblured bloom"
+    "Unblured bloom",
+    "DirLight shadow"
 };
 
 const char* tonemap_options[] = {
@@ -428,8 +448,7 @@ void renderer_ui(Renderer* renderer)
     bool pipeline_open = igCollapsingHeader_TreeNodeFlags("Pipeline", 0);
     if(pipeline_open)
     {
-        if(renderer->render_mode == PIPELINE_DEFERRED)
-            igCombo_Str_arr("GBuffer view", &renderer->gbuffer_view, gbuffer_options, GBUFFER_MAX, -1);
+        igCombo_Str_arr("GBuffer view", &renderer->gbuffer_view, gbuffer_options, GBUFFER_MAX, -1);
         igSeparator();
     }
 
@@ -463,6 +482,171 @@ void renderer_ui(Renderer* renderer)
         }
     }
     igEnd();
+}
+
+
+static inline void renderer_model_draw(const Model* model, Renderer* renderer, mat4 world_matrix, Camera *camera)
+{
+    if (!model || !model->is_loaded || !model->meshes)
+        return;
+
+    Shader* shader = renderer->active_shader;
+
+    // activate the shader
+    shader_use(shader);
+    // draw each primitive from a model
+    for (uint32_t mi = 0; mi < model->mesh_count; mi++)
+    {
+        const Mesh* mesh = &model->meshes[mi];
+
+        // multiply each model's mesh matrix by the world matrix of the entity that owns them
+        mat4 final_transform;
+        // avx makes EVERYTHING explode and i am too lazy to be bothered to fix it :D
+        glm_mat4_mul_sse2(world_matrix, (vec4*)mesh->transform, final_transform);
+
+        shader_set_mat4(shader, "u_model", final_transform);
+        
+        for(uint32_t pi = 0; pi < mesh->primitive_count; pi++)
+        {
+            const Primitive* current_primitive = &mesh->primitives[pi];
+            if(!glm_aabb_frustum(mesh->aabb, camera->frustum))
+                continue;
+            
+            bool has_albedo = false;
+            bool has_metallic_roughness = false;
+            bool has_normal = false;
+            bool has_emissive = false;
+            bool has_ao = false;
+
+            if (current_primitive->material.pbr.albedo)
+            {
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, current_primitive->material.pbr.albedo);
+                shader_set_int(shader, "u_albedo", 0);
+                has_albedo = true;
+            }
+            if(current_primitive->material.pbr.metallic_roughness)
+            {
+                glActiveTexture(GL_TEXTURE1);
+                glBindTexture(GL_TEXTURE_2D, current_primitive->material.pbr.metallic_roughness);
+                shader_set_int(shader, "u_metallic_roughness", 1);
+                has_metallic_roughness = true;
+            }
+            if(current_primitive->material.shared.normal)
+            {
+                glActiveTexture(GL_TEXTURE2);
+                glBindTexture(GL_TEXTURE_2D, current_primitive->material.shared.normal);
+                shader_set_int(shader, "u_normal", 2);
+                shader_set_vec2(shader, "u_normal_scale", current_primitive->material.shared.normal_scale);
+                has_normal = true;
+            }
+            if(current_primitive->material.shared.emissive)
+            {
+                glActiveTexture(GL_TEXTURE3);
+                glBindTexture(GL_TEXTURE_2D, current_primitive->material.shared.emissive);
+                shader_set_int(shader, "u_emissive", 3);
+                shader_set_bool(shader, "u_has_emissive_texcoord", current_primitive->material.shared.has_emissive_texcoord);
+                has_emissive = true;
+            }
+            if(current_primitive->material.shared.ambient_occlusion)
+            {
+                glActiveTexture(GL_TEXTURE4);
+                glBindTexture(GL_TEXTURE_2D, current_primitive->material.shared.ambient_occlusion);
+                shader_set_int(shader, "u_ao", 4);
+                shader_set_float(shader, "u_occlusion_strength", current_primitive->material.shared.occlusion_strength);
+                shader_set_vec2(shader, "u_occlusion_scale", current_primitive->material.shared.occlusion_scale);
+                shader_set_bool(shader, "u_has_occlusion_texcoord", current_primitive->material.shared.has_occlusion_texcoord);
+                has_ao = true;
+            }
+            if(current_primitive->material.has_iridescence)
+            {
+                glActiveTexture(GL_TEXTURE5);
+                glBindTexture(GL_TEXTURE_2D, current_primitive->material.iridescence.texture);
+                shader_set_int(shader, "u_iridescence", 5);
+                glActiveTexture(GL_TEXTURE6);
+                glBindTexture(GL_TEXTURE_2D, current_primitive->material.iridescence.thickness_texture);
+                shader_set_int(shader, "u_iridescence_thickness", 6);
+                
+                shader_set_float(shader, "u_iridescence_thickness_max", current_primitive->material.iridescence.thickness_max);
+                shader_set_float(shader, "u_iridescence_thickness_min", current_primitive->material.iridescence.thickness_min);
+                shader_set_float(shader, "u_iridescence_factor", current_primitive->material.iridescence.factor);
+                shader_set_float(shader, "u_iridescence_ior", current_primitive->material.iridescence.ior);
+            }
+            if(current_primitive->material.has_volume)
+            {
+                glActiveTexture(GL_TEXTURE7);
+                glBindTexture(GL_TEXTURE_2D, current_primitive->material.volume.thickness_texture);
+                shader_set_int(shader, "u_volume_thickness", 7);
+                shader_set_float(shader, "u_volume_thickness_factor", current_primitive->material.volume.thickness_factor);
+                shader_set_float(shader, "u_volume_attenuation_distance", current_primitive->material.volume.attenuation_distance);
+                shader_set_vec3(shader, "u_volume_attenuation_color", current_primitive->material.volume.attenuation_color);
+            }
+
+            shader_set_bool(shader, "u_has_albedo", has_albedo);
+            shader_set_vec4(shader, "u_albedo_factor", current_primitive->material.pbr.albedo_factor);
+
+            shader_set_bool(shader, "u_has_metallic_roughness", has_metallic_roughness);
+            shader_set_float(shader, "u_metallic_factor", current_primitive->material.pbr.metallic_factor);
+            shader_set_float(shader, "u_roughness_factor", current_primitive->material.pbr.roughness_factor);
+
+            shader_set_bool(shader, "u_has_normal", has_normal);
+
+            shader_set_bool(shader, "u_has_emissive", has_emissive);
+            shader_set_float(shader, "u_emissive_strength", current_primitive->material.shared.emissive_strength);
+            shader_set_vec3(shader, "u_emissive_factor", current_primitive->material.shared.emissive_factor);
+
+            shader_set_bool(shader, "u_has_ao", has_ao);
+
+            shader_set_bool(shader, "u_has_iridescence", current_primitive->material.has_iridescence);
+            shader_set_bool(shader, "u_has_volume", current_primitive->material.has_volume);
+            shader_set_bool(shader, "u_unlit", current_primitive->material.unlit);
+
+            glActiveTexture(GL_TEXTURE0);
+
+            glBindVertexArray(current_primitive->VAO);
+            glDrawElements(GL_TRIANGLES, current_primitive->index_count, current_primitive->index_type, (void*)0);
+            glBindVertexArray(0);
+        }
+    }
+}
+
+static inline void renderer_model_simpleDraw(const Model* model, Shader *shader, mat4 world_matrix)
+{
+    if (!model || !model->is_loaded || !model->meshes)
+        return;
+
+    // activate the shader
+    shader_use(shader);
+    // draw each primitive from a model
+    for (uint32_t mi = 0; mi < model->mesh_count; mi++)
+    {
+        const Mesh* mesh = &model->meshes[mi];
+
+        // multiply each model's mesh matrix by the world matrix of the entity that owns them
+        mat4 final_transform;
+        // avx makes EVERYTHING explode and i am too lazy to be bothered to fix it :D
+        glm_mat4_mul_sse2(world_matrix, (vec4*)mesh->transform, final_transform);
+
+        shader_set_mat4(shader, "u_model", final_transform);
+        
+        for(uint32_t pi = 0; pi < mesh->primitive_count; pi++)
+        {
+            const Primitive* current_primitive = &mesh->primitives[pi];
+
+            if (current_primitive->material.pbr.albedo)
+            {
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, current_primitive->material.pbr.albedo);
+                shader_set_int(shader, "u_albedo", 0);
+            }
+
+            glActiveTexture(GL_TEXTURE0);
+
+            glBindVertexArray(current_primitive->VAO);
+            glDrawElements(GL_TRIANGLES, current_primitive->index_count, current_primitive->index_type, (void*)0);
+            glBindVertexArray(0);
+        }
+    }
 }
 
 static inline void gbuffer_setup(Renderer* renderer, int w, int h)
@@ -769,129 +953,4 @@ static inline void ssao_update(Renderer* renderer, int w, int h)
     float noise_scale_y = renderer->viewportSize[1] / 2.0f;
     shader_set_vec2(&renderer->ssao_shader, "u_noise_scale", (vec2){noise_scale_x, noise_scale_y});
     shader_set_vec2(&renderer->ssao_shader, "u_viewport_size", renderer->viewportSize);
-}
-
-static inline void renderer_model_draw(const Model* model, Renderer* renderer, mat4 world_matrix, Camera *camera)
-{
-    if (!model || !model->is_loaded || !model->meshes)
-        return;
-
-    Shader* shader = renderer->active_shader;
-
-    // activate the shader
-    shader_use(shader);
-    // draw each primitive from a model
-    for (uint32_t mi = 0; mi < model->mesh_count; mi++)
-    {
-        const Mesh* mesh = &model->meshes[mi];
-        if (!glm_aabb_frustum(mesh->aabb, camera->frustum))
-            continue;
-
-        // multiply each model's mesh matrix by the world matrix of the entity that owns them
-        mat4 final_transform;
-        // avx makes EVERYTHING explode and i am too lazy to be bothered to fix it :D
-        glm_mat4_mul_sse2(world_matrix, (vec4*)mesh->transform, final_transform);
-
-        shader_set_mat4(shader, "u_model", final_transform);
-        
-        for(uint32_t pi = 0; pi < mesh->primitive_count; pi++)
-        {
-            const Primitive* current_primitive = &mesh->primitives[pi];
-            
-            bool has_albedo = false;
-            bool has_metallic_roughness = false;
-            bool has_normal = false;
-            bool has_emissive = false;
-            bool has_ao = false;
-
-            if (current_primitive->material.pbr.albedo)
-            {
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, current_primitive->material.pbr.albedo);
-                shader_set_int(shader, "u_albedo", 0);
-                has_albedo = true;
-            }
-            if(current_primitive->material.pbr.metallic_roughness)
-            {
-                glActiveTexture(GL_TEXTURE1);
-                glBindTexture(GL_TEXTURE_2D, current_primitive->material.pbr.metallic_roughness);
-                shader_set_int(shader, "u_metallic_roughness", 1);
-                has_metallic_roughness = true;
-            }
-            if(current_primitive->material.shared.normal)
-            {
-                glActiveTexture(GL_TEXTURE2);
-                glBindTexture(GL_TEXTURE_2D, current_primitive->material.shared.normal);
-                shader_set_int(shader, "u_normal", 2);
-                shader_set_vec2(shader, "u_normal_scale", current_primitive->material.shared.normal_scale);
-                has_normal = true;
-            }
-            if(current_primitive->material.shared.emissive)
-            {
-                glActiveTexture(GL_TEXTURE3);
-                glBindTexture(GL_TEXTURE_2D, current_primitive->material.shared.emissive);
-                shader_set_int(shader, "u_emissive", 3);
-                shader_set_bool(shader, "u_has_emissive_texcoord", current_primitive->material.shared.has_emissive_texcoord);
-                has_emissive = true;
-            }
-            if(current_primitive->material.shared.ambient_occlusion)
-            {
-                glActiveTexture(GL_TEXTURE4);
-                glBindTexture(GL_TEXTURE_2D, current_primitive->material.shared.ambient_occlusion);
-                shader_set_int(shader, "u_ao", 4);
-                shader_set_float(shader, "u_occlusion_strength", current_primitive->material.shared.occlusion_strength);
-                shader_set_vec2(shader, "u_occlusion_scale", current_primitive->material.shared.occlusion_scale);
-                shader_set_bool(shader, "u_has_occlusion_texcoord", current_primitive->material.shared.has_occlusion_texcoord);
-                has_ao = true;
-            }
-            if(current_primitive->material.has_iridescence)
-            {
-                glActiveTexture(GL_TEXTURE5);
-                glBindTexture(GL_TEXTURE_2D, current_primitive->material.iridescence.texture);
-                shader_set_int(shader, "u_iridescence", 5);
-                glActiveTexture(GL_TEXTURE6);
-                glBindTexture(GL_TEXTURE_2D, current_primitive->material.iridescence.thickness_texture);
-                shader_set_int(shader, "u_iridescence_thickness", 6);
-                
-                shader_set_float(shader, "u_iridescence_thickness_max", current_primitive->material.iridescence.thickness_max);
-                shader_set_float(shader, "u_iridescence_thickness_min", current_primitive->material.iridescence.thickness_min);
-                shader_set_float(shader, "u_iridescence_factor", current_primitive->material.iridescence.factor);
-                shader_set_float(shader, "u_iridescence_ior", current_primitive->material.iridescence.ior);
-            }
-            if(current_primitive->material.has_volume)
-            {
-                glActiveTexture(GL_TEXTURE7);
-                glBindTexture(GL_TEXTURE_2D, current_primitive->material.volume.thickness_texture);
-                shader_set_int(shader, "u_volume_thickness", 7);
-                shader_set_float(shader, "u_volume_thickness_factor", current_primitive->material.volume.thickness_factor);
-                shader_set_float(shader, "u_volume_attenuation_distance", current_primitive->material.volume.attenuation_distance);
-                shader_set_vec3(shader, "u_volume_attenuation_color", current_primitive->material.volume.attenuation_color);
-            }
-
-            shader_set_bool(shader, "u_has_albedo", has_albedo);
-            shader_set_vec4(shader, "u_albedo_factor", current_primitive->material.pbr.albedo_factor);
-
-            shader_set_bool(shader, "u_has_metallic_roughness", has_metallic_roughness);
-            shader_set_float(shader, "u_metallic_factor", current_primitive->material.pbr.metallic_factor);
-            shader_set_float(shader, "u_roughness_factor", current_primitive->material.pbr.roughness_factor);
-
-            shader_set_bool(shader, "u_has_normal", has_normal);
-
-            shader_set_bool(shader, "u_has_emissive", has_emissive);
-            shader_set_float(shader, "u_emissive_strength", current_primitive->material.shared.emissive_strength);
-            shader_set_vec3(shader, "u_emissive_factor", current_primitive->material.shared.emissive_factor);
-
-            shader_set_bool(shader, "u_has_ao", has_ao);
-
-            shader_set_bool(shader, "u_has_iridescence", current_primitive->material.has_iridescence);
-            shader_set_bool(shader, "u_has_volume", current_primitive->material.has_volume);
-            shader_set_bool(shader, "u_unlit", current_primitive->material.unlit);
-
-            glActiveTexture(GL_TEXTURE0);
-
-            glBindVertexArray(current_primitive->VAO);
-            glDrawElements(GL_TRIANGLES, current_primitive->index_count, current_primitive->index_type, (void*)0);
-            glBindVertexArray(0);
-        }
-    }
 }

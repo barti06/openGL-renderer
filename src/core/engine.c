@@ -18,7 +18,6 @@ void engine_init(Engine *engine, int argc, char *argv[])
 {
     int32_t w = 0;
     int32_t h = 0;
-    pipeline_t pipeline = PIPELINE_DEFERRED;
 
     for(int i = 1; i < argc; i++)
     {
@@ -27,16 +26,12 @@ void engine_init(Engine *engine, int argc, char *argv[])
             w = atoi(argv[i + 1]);
         if(!strcmp(argv[i], "-h") || !strcmp(argv[i], "--height"))
             h = atoi(argv[i + 1]);
-        if(!strcmp(argv[i], "-f") || !strcmp(argv[i], "--forward"))
-            pipeline = PIPELINE_FORWARD;
-        if(!strcmp(argv[i], "-d") || !strcmp(argv[i], "--deferred"))
-            continue;
     }
 
     Window *win = &engine->window;
     window_init(win, w, h);
 
-    renderer_init(&engine->renderer, pipeline, win->width, win->height);
+    renderer_init(&engine->renderer, win->width, win->height);
 
     engine->last_time = 0.0f; // init delta timing
     engine->canMove = false;
@@ -172,7 +167,7 @@ static inline void shader_update_light(Shader* shader, World* wl, int32_t index,
         (*point_ind)++;
         break;
 
-// TODO: finish spot light support 
+        // TODO: finish spot light support 
         case LIGHT_TYPE_SPOT:
         snprintf(uniform_name, sizeof(uniform_name), "u_spotlights[%u].position", *spot_ind);
         shader_set_vec3(shader, uniform_name, wl->transforms[index].position);
@@ -186,7 +181,6 @@ static inline void shader_update_light(Shader* shader, World* wl, int32_t index,
         shader_set_vec3(shader, uniform_name, wl->lights[index].lights.spot.diffuse);
         (*spot_ind)++;
         break;
-
         default:
         break;
     }
@@ -196,17 +190,9 @@ static inline void engine_send_lights(Engine* engine)
 {
     int32_t point_index = 0;
     int32_t spot_index = 0;
-    switch(engine->renderer.render_mode)
-    {
-    case PIPELINE_DEFERRED: // in deferred mode, lights are calculated in the light shader, owned by the renderer
+
     shader_use(&engine->renderer.light_shader);
-    break;
-    case PIPELINE_FORWARD:
-    shader_use(&engine->renderer.forward_shader);
-    break;
-    default:
-    break;
-    }
+
     for(size_t index = 0; index < engine->world->entities_count; index++)
     {
         if(!engine->world->entities[index].active)
@@ -214,29 +200,18 @@ static inline void engine_send_lights(Engine* engine)
         if (!entity_has_component(&engine->world->entities[index], COMPONENT_LIGHT))
             continue;
 
-        switch(engine->renderer.render_mode)
-        {
-        case PIPELINE_DEFERRED:
         shader_update_light(&engine->renderer.light_shader, engine->world, index, &point_index, &spot_index);
-        break;
-        case PIPELINE_FORWARD:
-        shader_update_light(&engine->renderer.forward_shader, engine->world, index, &point_index, &spot_index);
-        break;
-        default:
-        break;
-        }
     }
-    switch(engine->renderer.render_mode)
+
+    if(engine->world->enable_directional_light)
     {
-        case PIPELINE_DEFERRED:
-        shader_set_int(&engine->renderer.light_shader, "u_pointLight_count", point_index);
-        shader_set_int(&engine->renderer.light_shader, "u_spotLight_count", spot_index);
-        break;
-        case PIPELINE_FORWARD:
-        shader_set_int(&engine->renderer.forward_shader, "u_pointLight_count", point_index);
-        shader_set_int(&engine->renderer.forward_shader, "u_spotLight_count", spot_index);
-        break;
-        default:
-        break;
+        // dir light uses the rotation from the transform component to get its direction
+        shader_set_vec3(&engine->renderer.light_shader, "u_dirlight.direction", engine->world->dirlight_dir);
+        shader_set_vec3(&engine->renderer.light_shader, "u_dirlight.diffuse", engine->world->directional.diffuse);
+        shader_set_float(&engine->renderer.light_shader, "u_dirlight.intensity", engine->world->dirlight_inten);
     }
+
+    shader_set_bool(&engine->renderer.light_shader, "u_dirlight_enabled", engine->world->enable_directional_light);
+    shader_set_int(&engine->renderer.light_shader, "u_pointLight_count", point_index);
+    shader_set_int(&engine->renderer.light_shader, "u_spotLight_count", spot_index);
 }

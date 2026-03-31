@@ -38,19 +38,33 @@ struct SpotLight
     vec3 diffuse;
 };
 
+struct directional_light
+{
+    vec3 direction;
+    vec3 diffuse;
+    float intensity;
+};
+
 uniform sampler2D g_position;
 uniform sampler2D g_normal;
 uniform sampler2D g_albedo;
 uniform sampler2D g_orm;
 uniform sampler2D g_emissive;
 uniform sampler2D g_depth;
+
 uniform sampler2D ssao;
+
+uniform sampler2D u_shadowMap;
+uniform mat4 u_lightSpaceMat;
 
 uniform vec3 u_camera_position;
 uniform int u_gbuffer_view;
 
 uniform int u_pointLight_count;
 uniform point_light u_pointlights[MAX_POINTLIGHT_COUNT];
+
+uniform directional_light u_dirlight;
+uniform bool u_dirlight_enabled;
 
 uniform float u_bloom_threshold;
 
@@ -68,11 +82,25 @@ vec3 F_Schlick(float cosTheta, vec3 F0);
 // shared Cook-Torrance evaluator
 vec3 PBR(vec3 N, vec3 V, vec3 L, vec3 albedo, float metallic, float roughness, vec3 radiance, float NdotV);
 
+// specific Fresnel schlick for IBLs as default f_S can overcount specular
+vec3 F_Schlick_Roughness(float cosTheta, vec3 F0, float roughness);
+
 vec3 get_point_light(point_light light, vec3 N, vec3 fragPos, vec3 V, vec3 albedo, float metallic, float roughness, float NdotV);
 
+vec3 get_directional_light(directional_light light, vec3 N, vec3 V, vec3 albedo, float metallic, float roughness, float NdotV);
+
+float dirLight_shadow(vec4 lightSpaceVec, vec3 N, vec3 lightDir);
 
 void main()
 {
+    float depth = texture(g_depth, v_uv).r;
+    if(depth == 1.0)
+    {
+        FragColor = vec4(0.2, 0.3, 0.3, 1.0);
+        brightColor = vec4(0.0, 0.0, 0.0, 1.0);
+        return;
+    }
+
     vec3 position = texture(g_position, v_uv).rgb;
     
     vec3 normal = texture(g_normal, v_uv).rgb;
@@ -81,13 +109,11 @@ void main()
 
     vec4 ormt = texture(g_orm, v_uv);
     //float occlusion = ormt.r;
-    float occlusion = texture(ssao, v_uv).r;
+    float occlusion = u_ssao_enabled ? texture(ssao, v_uv).r : 0.0;
     float roughness = ormt.g;
     float metalness = ormt.b;
 
     vec3 emissive = texture(g_emissive, v_uv).rgb;
-
-    float depth = texture(g_depth, v_uv).r;
 
     vec3 view_direction = normalize(u_camera_position - position);
     float norm_dot_view = max(dot(normal, view_direction), 0.0);
@@ -104,9 +130,14 @@ void main()
         total_light += get_point_light(current_pointlight, normal, position, view_direction, albedo, metalness, roughness, norm_dot_view);
     }
 
-    vec3 ambient = vec3(0.05) * albedo;
-    if(u_ssao_enabled)
-        ambient *= occlusion;
+    float dir_shadow = 0.0;
+    if(u_dirlight_enabled)
+    {
+        vec4 lightSpaceVec = u_lightSpaceMat * vec4(position, 1.0);
+        dir_shadow += 1.0 - dirLight_shadow(lightSpaceVec, normal, -u_dirlight.direction);
+        total_light += dir_shadow * get_directional_light(u_dirlight, normal, view_direction, albedo, metalness, roughness, norm_dot_view);
+    }
+    vec3 ambient = vec3(0.05) * albedo * occlusion;
 
     total_light += ambient;
 
@@ -116,24 +147,29 @@ void main()
     float brightness = dot(color, vec3(0.2126, 0.7152, 0.0722));
     brightColor = brightness > u_bloom_threshold ? vec4(color, 1.0) : vec4(0.0, 0.0, 0.0, 1.0);
 
-    if(u_gbuffer_view == 1)
-        color = position;
-    else if(u_gbuffer_view == 2) 
-        color = normal * 0.5 + 0.5; // remap
-    else if (u_gbuffer_view == 3)
-        color = albedo;
-    else if (u_gbuffer_view == 4)
-        color = vec3(occlusion);
-    else if (u_gbuffer_view == 5)
-        color = vec3(roughness);
-    else if (u_gbuffer_view == 6)
-        color = vec3(metalness);
-    else if (u_gbuffer_view == 7)
-        color = emissive;
-    else if (u_gbuffer_view == 8)
-        color = vec3(depth);
-    else if (u_gbuffer_view == 9)
-        color = brightColor.xyz;
+    if(u_gbuffer_view != 0)
+    {
+        if(u_gbuffer_view == 1)
+            color = position;
+        else if(u_gbuffer_view == 2) 
+            color = normal * 0.5 + 0.5; // remap
+        else if (u_gbuffer_view == 3)
+            color = albedo;
+        else if (u_gbuffer_view == 4)
+            color = vec3(occlusion);
+        else if (u_gbuffer_view == 5)
+            color = vec3(roughness);
+        else if (u_gbuffer_view == 6)
+            color = vec3(metalness);
+        else if (u_gbuffer_view == 7)
+            color = emissive;
+        else if (u_gbuffer_view == 8)
+            color = vec3(depth);
+        else if (u_gbuffer_view == 9)
+            color = brightColor.xyz;
+        else if (u_gbuffer_view == 10)
+            color = vec3(dir_shadow);
+    }
 
     FragColor = vec4(color, 1.0);
 
@@ -182,7 +218,6 @@ vec3 PBR(vec3 N, vec3 V, vec3 L,
 
     // specularity
     vec3 spec = (D * G * F) / (4.0 * NdotV * NdotL + 1e-4);
-
     // diffuse
     vec3 kD = (1.0 - F) * (1.0 - metallic);
     vec3 diff = kD * albedo / PI;
@@ -190,7 +225,13 @@ vec3 PBR(vec3 N, vec3 V, vec3 L,
     return (diff + spec) * radiance * NdotL;
 }
 
-vec3 get_point_light(point_light light, vec3 N, vec3 fragPos, vec3 V, vec3 albedo, float metallic, float roughness, float NdotV)
+vec3 F_Schlick_Roughness(float cosTheta, vec3 F0, float roughness)
+{
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+vec3 get_point_light(point_light light, vec3 N, vec3 fragPos, vec3 V, 
+                    vec3 albedo, float metallic, float roughness, float NdotV)
 {
     vec3 toLight = light.position - fragPos;
     float dist = length(toLight);
@@ -200,4 +241,47 @@ vec3 get_point_light(point_light light, vec3 N, vec3 fragPos, vec3 V, vec3 albed
     vec3 radiance = light.diffuse * atten;
 
     return PBR(N, V, L, albedo, metallic, roughness, radiance, NdotV);
+}
+
+vec3 get_directional_light(directional_light light, vec3 N, vec3 V, 
+                           vec3 albedo, float metallic, float roughness, float NdotV)
+{
+    vec3 L = normalize(-light.direction);
+    vec3 radiance = light.diffuse * light.intensity;
+    return PBR(N, V, L, albedo, metallic, roughness, radiance, NdotV);
+}
+
+float dirLight_shadow(vec4 lightSpaceVec, vec3 N, vec3 lightDir)
+{
+    vec3 projCoords = lightSpaceVec.xyz / lightSpaceVec.w;
+    
+    // convert to 0,1
+    projCoords = projCoords * 0.5 + 0.5;
+    
+    if(projCoords.x < 0.0 || projCoords.x > 1.0 || 
+       projCoords.y < 0.0 || projCoords.y > 1.0 || 
+       projCoords.z > 1.0)
+    {
+        return 0.0;
+    }
+    
+    // sample shadow map
+    float currentDepth = projCoords.z;
+    
+    float bias = 0.0005; // fixed bias i choose
+    
+    // PCF
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(u_shadowMap, 0);
+    
+    for(int x = -1; x <= 1; x++)
+    {
+        for(int y = -1; y <= 1; y++)
+        {
+            float pcfDepth = texture(u_shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
+        }
+    }
+    
+    return shadow / 9.0;
 }

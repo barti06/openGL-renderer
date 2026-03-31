@@ -25,19 +25,20 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 )
 #my source files
 target_sources(${PROJECT_NAME} PRIVATE
-    src/main.c
-    src/render/shader.c
-    src/core/window.c
-    src/core/engine.c
-    src/scene/camera.c
-    src/implementations.c
-    src/asset/model.c
-    src/asset/primitive.c
-    src/scene/world.c
-    src/scene/entity.c
-    src/asset/texture_loader.c
-    src/render/renderer.c
-    src/core/ui.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/main.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/implementations.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/asset/model.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/asset/primitive.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/asset/texture_loader.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scene/camera.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scene/world.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scene/entity.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shader.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/renderer.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shadows.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/window.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/engine.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/ui.c
 )
 
 # my header files

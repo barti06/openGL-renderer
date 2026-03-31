@@ -42,7 +42,6 @@ typedef enum LightType
 {
     LIGHT_TYPE_POINT,
     LIGHT_TYPE_SPOT,
-    LIGHT_TYPE_DIRECTIONAL,
     LIGHT_TYPE_MAX
 } LightType;
 
@@ -77,7 +76,6 @@ typedef struct LightComponent
     {
     PointLight point;
     SpotLight spot;
-    DirectionalLight directional;
     } lights;
 } LightComponent;
 
@@ -112,7 +110,6 @@ bool renderable_has_flag(RenderableComponent* r, RenderFlags f);
 // these will start on default constants, declared and defined @ entity.c
 LightComponent light_init_point(void);
 LightComponent light_init_spot(void);
-LightComponent light_init_directional(void);
 // point light
 void point_set_diffuse_3float(PointLight* t, float x, float y, float z);
 void point_set_diffuse_vec3(PointLight* t, vec3 xyz);

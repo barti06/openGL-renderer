@@ -31,6 +31,11 @@ World* world_create(void)
 
     world->camera = camera_init();
     world->current_event = WORLD_EVENT_NONE;
+    world->dirlight_inten = 1.0f;
+    glm_vec3_dup((vec3)GLM_VEC3_ONE_INIT, world->directional.diffuse);
+    glm_vec3_dup(((vec3){0.25f, -1.0f, -0.15f}), world->dirlight_dir);
+    world->enable_directional_light = true;
+    world->update_shadow = true;
 
     world->entities_count = 0;
     return world;
@@ -82,8 +87,7 @@ void world_destroy(World *world)
 
 const char* light_type_names[] = { 
     "Point", 
-    "Spot", 
-    "Directional" 
+    "Spot"
 };
 
 static struct
@@ -110,6 +114,15 @@ void world_ui(World* world)
     igText("Models: %u / %u", world->model_count, MAX_MODELS);
     igSeparator();
 
+    igCheckbox("Enable directional lighting", &world->enable_directional_light);
+    if(world->enable_directional_light)
+    {
+        igColorEdit3("Dirlight color", world->directional.diffuse, 0);
+        if(igSliderFloat3("Dirlight direction", world->dirlight_dir, -1.0f, 1.0f, "%.2f", 0))
+            world->update_shadow = true;
+        igDragFloat("Dirlight intensity", &world->dirlight_inten, 0.1f, 0.0f, 250.0f, "%.1f", 0);
+    }
+    igSeparator();
     // get screen center to draw the new popup window there
     ImVec2 center;
     ImGuiIO* io = igGetIO_Nil();
@@ -174,6 +187,7 @@ void world_ui(World* world)
             else
             {
                 world_new_model(world, add_model_s.path, add_model_s.name);
+                world->update_shadow = true;
             }
             add_model_s.open = false;
             world->current_event = WORLD_EVENT_NONE;
@@ -193,6 +207,7 @@ void world_ui(World* world)
         igEndPopup();
     }
 
+    // only one dirlight can exist so i got it out of here
     // add light button
     if(igButton("Add light", (ImVec2){0,0}))
     {
@@ -212,7 +227,7 @@ void world_ui(World* world)
         world->current_event = WORLD_EVENT_DISABLE_INPUT;
         
         // entity light type loader
-        igCombo_Str_arr("Light type", &add_light_s.lt, light_type_names, LIGHT_TYPE_MAX, -1);
+        igCombo_Str_arr("Light type", &add_light_s.lt, light_type_names, 2, -1);
 
         // entity name loader
         igSpacing();
@@ -355,13 +370,8 @@ void world_ui(World* world)
                             sl->outer_cutoff = cosf(glm_rad(outer_deg));
                         break;
                     }
-                    case LIGHT_TYPE_DIRECTIONAL:
-                    {
-                        DirectionalLight* dl = &lc->lights.directional;
-                        igColorEdit3("Color", dl->diffuse, 0);
-                        break;
-                    }
-                    default: break;
+                    default: 
+                    break;
                 }
                 igUnindent(8.0f);
             }
@@ -422,9 +432,6 @@ static inline void world_add_light(World* world, EntityID id, LightType type)
         break;
         case LIGHT_TYPE_SPOT:
         world->lights[id] = light_init_spot();
-        break;
-        case LIGHT_TYPE_DIRECTIONAL:
-        world->lights[id] = light_init_directional();
         break;
         // default to a point light
         default:
