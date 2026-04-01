@@ -19,7 +19,6 @@ uniform float u_bias;
 uniform float u_strength;
 uniform int u_directions;  // number of ray directions
 uniform int u_steps; // samples per direction
-uniform vec2 u_viewport_size;
 
 void main()
 {

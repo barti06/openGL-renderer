@@ -190,8 +190,8 @@ static inline void engine_send_lights(Engine* engine)
 {
     int32_t point_index = 0;
     int32_t spot_index = 0;
-
-    shader_use(&engine->renderer.light_shader);
+    Shader* ls = &engine->renderer.gbuffer.light_shader;
+    shader_use(ls);
 
     for(size_t index = 0; index < engine->world->entities_count; index++)
     {
@@ -200,18 +200,18 @@ static inline void engine_send_lights(Engine* engine)
         if (!entity_has_component(&engine->world->entities[index], COMPONENT_LIGHT))
             continue;
 
-        shader_update_light(&engine->renderer.light_shader, engine->world, index, &point_index, &spot_index);
+        shader_update_light(ls, engine->world, index, &point_index, &spot_index);
     }
 
     if(engine->world->enable_directional_light)
     {
         // dir light uses the rotation from the transform component to get its direction
-        shader_set_vec3(&engine->renderer.light_shader, "u_dirlight.direction", engine->world->dirlight_dir);
-        shader_set_vec3(&engine->renderer.light_shader, "u_dirlight.diffuse", engine->world->directional.diffuse);
-        shader_set_float(&engine->renderer.light_shader, "u_dirlight.intensity", engine->world->dirlight_inten);
+        shader_set_vec3(ls, "u_dirlight.direction", engine->world->dirlight_dir);
+        shader_set_vec3(ls, "u_dirlight.diffuse", engine->world->directional.diffuse);
+        shader_set_float(ls, "u_dirlight.intensity", engine->world->dirlight_inten);
     }
 
-    shader_set_bool(&engine->renderer.light_shader, "u_dirlight_enabled", engine->world->enable_directional_light);
-    shader_set_int(&engine->renderer.light_shader, "u_pointLight_count", point_index);
-    shader_set_int(&engine->renderer.light_shader, "u_spotLight_count", spot_index);
+    shader_set_bool(ls, "u_dirlight_enabled", engine->world->enable_directional_light);
+    shader_set_int(ls, "u_pointLight_count", point_index);
+    shader_set_int(ls, "u_spotLight_count", spot_index);
 }
