@@ -1,6 +1,7 @@
 # Basic openGL renderer
 
-Basic OpenGL renderer written in C and using the following dependencies:
+Basic OpenGL renderer to view GLTF models. 
+Built using the following dependencies:
 
 - [cglm](https://github.com/recp/cglm)
 - [cgltf](https://github.com/jkuhlmann/cgltf)
