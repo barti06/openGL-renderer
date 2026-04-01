@@ -50,7 +50,8 @@ void main()
         vec2 dir = vec2(cos(angle), sin(angle));
 
         // convert direction from view space XY to UV space
-        vec2 uv_dir = dir * (u_radius / float(u_steps)) / vec2(u_viewport_size) * vec2(u_projection[0][0], u_projection[1][1]);
+        float view_depth = -frag_pos.z * 2.0;
+        vec2 uv_dir = dir * (u_radius / float(u_steps)) * vec2(u_projection[0][0], u_projection[1][1]) / view_depth;
 
         float max_horizon_sin = sin(u_bias);
 
