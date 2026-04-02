@@ -77,19 +77,6 @@ void renderer_init(Renderer* renderer, int viewportX,
     postFX_setup(renderer, viewportX, viewportY);
     ssao_setup(renderer, viewportX, viewportY);
 
-    gBuffer_t *gb = &renderer->gbuffer;
-
-    // init gbuffer shader vars
-    shader_use(&gb->light_shader);
-    shader_set_int(&gb->light_shader, "g_position", 0);
-    shader_set_int(&gb->light_shader, "g_normal", 1);
-    shader_set_int(&gb->light_shader, "g_albedo", 2);
-    shader_set_int(&gb->light_shader, "g_orm", 3);
-    shader_set_int(&gb->light_shader, "g_emissive", 4);
-    shader_set_int(&gb->light_shader, "g_depth", 5);
-    shader_set_int(&gb->light_shader, "ssao", 6);
-    shader_set_int(&gb->light_shader, "u_shadowMap", 7);
-
     Shader *fs = &renderer->fx.fx_shader;
 
     // init post processing shader
@@ -146,6 +133,7 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
 
     renderSettings_t *rs = &renderer->settings;
     shader_use(&renderer->gbuffer.light_shader);
+    shader_set_mat4(&renderer->gbuffer.light_shader, "u_inv_viewproj", world->camera.inv_viewproj);
     shader_set_vec3(&renderer->gbuffer.light_shader, "u_camera_position", world->camera.position);
     shader_set_int(&renderer->gbuffer.light_shader, "u_gbuffer_view", rs->gbuffer_view);
     shader_set_float(&renderer->gbuffer.light_shader, "u_bloom_threshold", rs->bloom_threshold);
@@ -155,6 +143,7 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
     shader_use(&ssao->ssao_shader);
     shader_set_mat4(&ssao->ssao_shader, "u_view", world->camera.view);
     shader_set_mat4(&ssao->ssao_shader, "u_projection", world->camera.projection);
+    shader_set_mat4(&ssao->ssao_shader, "u_inv_proj", world->camera.inv_proj);
     shader_set_float(&ssao->ssao_shader, "u_radius", rs->ssao_radius);
     shader_set_float(&ssao->ssao_shader, "u_bias", rs->ssao_bias);
     shader_set_float(&ssao->ssao_shader, "u_strength", rs->ssao_strength);
@@ -230,12 +219,10 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     glClear(GL_COLOR_BUFFER_BIT);
     shader_use(&ssao->ssao_shader);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, renderer->gbuffer.g_position);
-    glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, renderer->gbuffer.g_normal);
-    glActiveTexture(GL_TEXTURE2);
+    glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, renderer->gbuffer.g_depth);
-    glActiveTexture(GL_TEXTURE3);
+    glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, ssao->ssao_noise_texture);
     glBindVertexArray(renderer->quad_VAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -261,31 +248,25 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     shader_use(&renderer->gbuffer.light_shader);
     glDisable(GL_DEPTH_TEST);
     glClear(GL_COLOR_BUFFER_BIT);
-    // send pos texture
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, renderer->gbuffer.g_position);
     // send normal texture
-    glActiveTexture(GL_TEXTURE1);
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, renderer->gbuffer.g_normal);
     // send albedo texture
-    glActiveTexture(GL_TEXTURE2);
+    glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, renderer->gbuffer.g_albedo);
     // send ormt texture
-    glActiveTexture(GL_TEXTURE3);
+    glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, renderer->gbuffer.g_orm);
     // send emissive texture
-    glActiveTexture(GL_TEXTURE4);
+    glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, renderer->gbuffer.g_emissive);
     // send depth texture
-    glActiveTexture(GL_TEXTURE5);
+    glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D, renderer->gbuffer.g_depth);
     // send ssao texture
-    glActiveTexture(GL_TEXTURE6);
+    glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, ssao->ssao_blur_texture);
-    // send shadow
-    glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, renderer->shadow.tex);
-    shadowMap_send(&renderer->gbuffer.light_shader, 7, &renderer->shadow);
+    shadowMap_send(&renderer->gbuffer.light_shader, 6, &renderer->shadow);
     // render light pass to a quad
     glBindVertexArray(renderer->quad_VAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -359,15 +340,28 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
 
 void renderer_gbuffer_reload(Renderer* renderer)
 {
-    shader_reload_frag(&renderer->gbuffer.light_shader);
-    shader_use(&renderer->gbuffer.light_shader);
-    shader_set_int(&renderer->gbuffer.light_shader, "g_position", 0);
-    shader_set_int(&renderer->gbuffer.light_shader, "g_normal", 1);
-    shader_set_int(&renderer->gbuffer.light_shader, "g_albedo", 2);
-    shader_set_int(&renderer->gbuffer.light_shader, "g_orm", 3);
-    shader_set_int(&renderer->gbuffer.light_shader, "g_emissive", 4);
-    shader_set_int(&renderer->gbuffer.light_shader, "g_depth", 5);
-    shader_set_int(&renderer->gbuffer.light_shader, "ssao", 6);
+    Shader *ds = &renderer->gbuffer.deferred_shader;
+    Shader *ls = &renderer->gbuffer.light_shader;
+    shader_reload_frag(ls);
+    shader_use(ls);
+    shader_set_int(ls, "g_normal", 0);
+    shader_set_int(ls, "g_albedo", 1);
+    shader_set_int(ls, "g_orm", 2);
+    shader_set_int(ls, "g_emissive", 3);
+    shader_set_int(ls, "g_depth", 4);
+    shader_set_int(ls, "ssao", 5);
+    shader_set_int(ls, "u_shadowMap", 6);
+
+    // init gbuffer shader vars
+    shader_use(ds);
+    shader_set_int(ds, "u_albedo", 0);
+    shader_set_int(ds, "u_metallic_roughness", 1);
+    shader_set_int(ds, "u_normal", 2);
+    shader_set_int(ds, "u_emissive", 3);
+    shader_set_int(ds, "u_ao", 4);
+    shader_set_int(ds, "u_iridescence", 5);
+    shader_set_int(ds, "u_iridescence_thickness", 6);
+    shader_set_int(ds, "u_volume_thickness", 7);
 }
 void renderer_gbuffer_update(Renderer* renderer, vec3 camera_pos)
 {
@@ -502,6 +496,10 @@ static inline void renderer_model_draw(const Model* model, Renderer* renderer, m
     for (uint32_t mi = 0; mi < model->mesh_count; mi++)
     {
         const Mesh* mesh = &model->meshes[mi];
+        vec3 aabb[2];
+        glm_aabb_transform(mesh->aabb, world_matrix, aabb);
+        if(!glm_aabb_frustum(aabb, camera->frustum))
+            continue;
 
         // multiply each model's mesh matrix by the world matrix of the entity that owns them
         mat4 final_transform;
@@ -513,8 +511,6 @@ static inline void renderer_model_draw(const Model* model, Renderer* renderer, m
         for(uint32_t pi = 0; pi < mesh->primitive_count; pi++)
         {
             const Primitive* current_primitive = &mesh->primitives[pi];
-            if(!glm_aabb_frustum(mesh->aabb, camera->frustum))
-                continue;
             
             bool has_albedo = false;
             bool has_metallic_roughness = false;
@@ -526,21 +522,18 @@ static inline void renderer_model_draw(const Model* model, Renderer* renderer, m
             {
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, current_primitive->material.pbr.albedo);
-                shader_set_int(shader, "u_albedo", 0);
                 has_albedo = true;
             }
             if(current_primitive->material.pbr.metallic_roughness)
             {
                 glActiveTexture(GL_TEXTURE1);
                 glBindTexture(GL_TEXTURE_2D, current_primitive->material.pbr.metallic_roughness);
-                shader_set_int(shader, "u_metallic_roughness", 1);
                 has_metallic_roughness = true;
             }
             if(current_primitive->material.shared.normal)
             {
                 glActiveTexture(GL_TEXTURE2);
                 glBindTexture(GL_TEXTURE_2D, current_primitive->material.shared.normal);
-                shader_set_int(shader, "u_normal", 2);
                 shader_set_vec2(shader, "u_normal_scale", current_primitive->material.shared.normal_scale);
                 has_normal = true;
             }
@@ -548,7 +541,6 @@ static inline void renderer_model_draw(const Model* model, Renderer* renderer, m
             {
                 glActiveTexture(GL_TEXTURE3);
                 glBindTexture(GL_TEXTURE_2D, current_primitive->material.shared.emissive);
-                shader_set_int(shader, "u_emissive", 3);
                 shader_set_bool(shader, "u_has_emissive_texcoord", current_primitive->material.shared.has_emissive_texcoord);
                 has_emissive = true;
             }
@@ -556,7 +548,6 @@ static inline void renderer_model_draw(const Model* model, Renderer* renderer, m
             {
                 glActiveTexture(GL_TEXTURE4);
                 glBindTexture(GL_TEXTURE_2D, current_primitive->material.shared.ambient_occlusion);
-                shader_set_int(shader, "u_ao", 4);
                 shader_set_float(shader, "u_occlusion_strength", current_primitive->material.shared.occlusion_strength);
                 shader_set_vec2(shader, "u_occlusion_scale", current_primitive->material.shared.occlusion_scale);
                 shader_set_bool(shader, "u_has_occlusion_texcoord", current_primitive->material.shared.has_occlusion_texcoord);
@@ -566,10 +557,8 @@ static inline void renderer_model_draw(const Model* model, Renderer* renderer, m
             {
                 glActiveTexture(GL_TEXTURE5);
                 glBindTexture(GL_TEXTURE_2D, current_primitive->material.iridescence.texture);
-                shader_set_int(shader, "u_iridescence", 5);
                 glActiveTexture(GL_TEXTURE6);
                 glBindTexture(GL_TEXTURE_2D, current_primitive->material.iridescence.thickness_texture);
-                shader_set_int(shader, "u_iridescence_thickness", 6);
                 
                 shader_set_float(shader, "u_iridescence_thickness_max", current_primitive->material.iridescence.thickness_max);
                 shader_set_float(shader, "u_iridescence_thickness_min", current_primitive->material.iridescence.thickness_min);
@@ -580,7 +569,6 @@ static inline void renderer_model_draw(const Model* model, Renderer* renderer, m
             {
                 glActiveTexture(GL_TEXTURE7);
                 glBindTexture(GL_TEXTURE_2D, current_primitive->material.volume.thickness_texture);
-                shader_set_int(shader, "u_volume_thickness", 7);
                 shader_set_float(shader, "u_volume_thickness_factor", current_primitive->material.volume.thickness_factor);
                 shader_set_float(shader, "u_volume_attenuation_distance", current_primitive->material.volume.attenuation_distance);
                 shader_set_vec3(shader, "u_volume_attenuation_color", current_primitive->material.volume.attenuation_color);

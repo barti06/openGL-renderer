@@ -12,6 +12,7 @@ uniform sampler2D u_noise;
 
 uniform mat4 u_projection;
 uniform mat4 u_view;
+uniform mat4 u_inv_proj;
 
 uniform vec2 u_noise_scale;
 uniform float u_radius;
@@ -19,6 +20,8 @@ uniform float u_bias;
 uniform float u_strength;
 uniform int u_directions;  // number of ray directions
 uniform int u_steps; // samples per direction
+
+vec3 calculate_view_pos(vec2 uv);
 
 void main()
 {
@@ -31,7 +34,7 @@ void main()
     }
 
     // get fragment pos and normal
-    vec3 frag_pos = vec3(u_view * texture(g_position, v_uv));
+    vec3 frag_pos = calculate_view_pos(v_uv);
     vec3 normal = normalize(mat3(u_view) * texture(g_normal, v_uv).xyz);
 
     // use noise to rotate the ray directions per pixel
@@ -49,7 +52,7 @@ void main()
         vec2 dir = vec2(cos(angle), sin(angle));
 
         // convert direction from view space XY to UV space
-        float view_depth = -frag_pos.z * 2.0;
+        float view_depth = max(-frag_pos.z, 0.001) * 2.0;
         vec2 uv_dir = dir * (u_radius / float(u_steps)) * vec2(u_projection[0][0], u_projection[1][1]) / view_depth;
 
         float max_horizon_sin = sin(u_bias);
@@ -62,7 +65,7 @@ void main()
             if(sample_uv.x < 0.0 || sample_uv.x > 1.0 || sample_uv.y < 0.0 || sample_uv.y > 1.0)
                 break;
 
-            vec3 sample_pos = vec3(u_view * texture(g_position, sample_uv));
+            vec3 sample_pos = calculate_view_pos(sample_uv);
             vec3 horizon = sample_pos - frag_pos;
             float squared_dist = dot(horizon, horizon);
 
@@ -86,4 +89,19 @@ void main()
     }
     occlusion = occlusion / float(u_directions);
     fragColor  = clamp(1.0 - occlusion * u_strength, 0.0, 1.0);
+}
+
+vec3 calculate_view_pos(vec2 uv)
+{
+    // grab depth
+    float depth = texture(g_depth, uv).r;
+
+    // convert to ndc
+    vec4 ndc = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+
+    // unproject
+    vec4 view_pos = u_inv_proj * ndc;
+
+    // undo perspective divide
+    return view_pos.xyz / view_pos.w;
 }

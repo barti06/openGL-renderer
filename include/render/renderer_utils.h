@@ -7,22 +7,13 @@ static inline void gbuffer_setup(Renderer* renderer, int w, int h)
     glGenFramebuffers(1, &renderer->gbuffer.gBuffer_fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, renderer->gbuffer.gBuffer_fbo);
 
-    // main pass position texture
-    glGenTextures(1, &renderer->gbuffer.g_position);
-    glBindTexture(GL_TEXTURE_2D, renderer->gbuffer.g_position);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderer->gbuffer.g_position, 0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
     // main pass normal texture
     glGenTextures(1, &renderer->gbuffer.g_normal);
     glBindTexture(GL_TEXTURE_2D, renderer->gbuffer.g_normal);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, renderer->gbuffer.g_normal, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderer->gbuffer.g_normal, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     // main pass albedo texture
@@ -31,7 +22,7 @@ static inline void gbuffer_setup(Renderer* renderer, int w, int h)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, renderer->gbuffer.g_albedo, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, renderer->gbuffer.g_albedo, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     // main pass orm (occlusion, roughness & metalness) texture
@@ -40,7 +31,7 @@ static inline void gbuffer_setup(Renderer* renderer, int w, int h)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, renderer->gbuffer.g_orm, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, renderer->gbuffer.g_orm, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     // main pass emissive texture
@@ -49,7 +40,7 @@ static inline void gbuffer_setup(Renderer* renderer, int w, int h)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGB, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT4, GL_TEXTURE_2D, renderer->gbuffer.g_emissive, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, renderer->gbuffer.g_emissive, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
 
     // main pass depth texture
@@ -71,6 +62,29 @@ static inline void gbuffer_setup(Renderer* renderer, int w, int h)
 	    log_error("ERROR... renderer_init() says: FRAMEBUFFER INCOMPLETE.\n");
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    Shader *ds = &renderer->gbuffer.deferred_shader;
+    Shader *ls = &renderer->gbuffer.light_shader;
+    // init light shader vars
+    shader_use(ls);
+    shader_set_int(ls, "g_normal", 0);
+    shader_set_int(ls, "g_albedo", 1);
+    shader_set_int(ls, "g_orm", 2);
+    shader_set_int(ls, "g_emissive", 3);
+    shader_set_int(ls, "g_depth", 4);
+    shader_set_int(ls, "ssao", 5);
+    shader_set_int(ls, "u_shadowMap", 6);
+
+    // init gbuffer shader vars
+    shader_use(ds);
+    shader_set_int(ds, "u_albedo", 0);
+    shader_set_int(ds, "u_metallic_roughness", 1);
+    shader_set_int(ds, "u_normal", 2);
+    shader_set_int(ds, "u_emissive", 3);
+    shader_set_int(ds, "u_ao", 4);
+    shader_set_int(ds, "u_iridescence", 5);
+    shader_set_int(ds, "u_iridescence_thickness", 6);
+    shader_set_int(ds, "u_volume_thickness", 7);
 }
 
 static inline void postFX_setup(Renderer* renderer, int w, int h)
@@ -136,11 +150,6 @@ static inline void postFX_setup(Renderer* renderer, int w, int h)
 static inline void gbuffer_update(Renderer* renderer, int w, int h)
 {
     glBindFramebuffer(GL_FRAMEBUFFER, renderer->gbuffer.gBuffer_fbo);
-
-    // main pass position texture
-    glBindTexture(GL_TEXTURE_2D, renderer->gbuffer.g_position);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
-    glBindTexture(GL_TEXTURE_2D, 0);
 
     // main pass normal texture
     glBindTexture(GL_TEXTURE_2D, renderer->gbuffer.g_normal);
@@ -249,20 +258,19 @@ static inline void ssao_setup(Renderer* renderer, int w, int h)
 
     renderSettings_t *rs = &renderer->settings;
 
-    rs->ssao_radius = 0.2f;
+    rs->ssao_radius = 0.5f;
     rs->ssao_bias = 0.02f;
-    rs->ssao_strength = 1.5f;
-    rs->hbao_directions = 8;
+    rs->ssao_strength = 2.2f;
+    rs->hbao_directions = 4;
     rs->hbao_steps = 4;
     rs->ssao_enabled = true;
 
     Shader *aos = &ssao->ssao_shader;
 
     shader_use(aos);
-    shader_set_int(aos, "g_position", 0);
-    shader_set_int(aos, "g_normal", 1);
-    shader_set_int(aos, "g_depth", 2);
-    shader_set_int(aos, "u_noise", 3);
+    shader_set_int(aos, "g_normal", 0);
+    shader_set_int(aos, "g_depth", 1);
+    shader_set_int(aos, "u_noise", 2);
     shader_set_int(aos, "u_directions", rs->hbao_directions);
     shader_set_int(aos, "u_steps", rs->hbao_steps);
     float noise_scale_x = (float)w / 4.0f;

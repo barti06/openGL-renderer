@@ -147,4 +147,8 @@ void camera_update_matrices(Camera* camera, vec2 viewportSize, float nearZ, floa
     // update frustum
     glm_mat4_mul(camera->projection, camera->view, camera->view_proj);
     glm_frustum_planes(camera->view_proj, camera->frustum);
+
+    // get inverse matrices
+    glm_mat4_inv(camera->projection, camera->inv_proj);
+    glm_mat4_inv(camera->view_proj, camera->inv_viewproj);
 }

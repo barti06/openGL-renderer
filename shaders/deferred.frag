@@ -1,13 +1,9 @@
 #version 460 core
 
-#define PI 3.14159265359
-#define MAX_POINTLIGHT_COUNT 64
-
-layout (location = 0) out vec4 g_position;
-layout (location = 1) out vec4 g_normal;
-layout (location = 2) out vec4 g_albedo;
-layout (location = 3) out vec4 g_orm;
-layout (location = 4) out vec4 g_emissive;
+layout (location = 0) out vec4 g_normal;
+layout (location = 1) out vec4 g_albedo;
+layout (location = 2) out vec4 g_orm;
+layout (location = 3) out vec4 g_emissive;
 
 in vec2 v_uv;
 in vec2 v_uv2;
@@ -54,21 +50,27 @@ uniform vec3 u_emissive_factor;
 
 void main()
 {
-    // send position
-    g_position = vec4(v_fragment_pos,1.0);
-
     // extract albedo
-    vec4 color = u_has_albedo ? texture(u_albedo, v_uv) * u_albedo_factor : u_albedo_factor;
+    vec4 color = vec4(u_albedo_factor);
+    if(u_has_albedo)
+    {
+        color *= pow(texture(u_albedo, v_uv), vec4(2.2));
+    }
 
     if(color.a < 0.1)
         discard;
     // linear to srgb & send albedo
-    g_albedo = vec4(pow(color.rgb, vec3(2.2)),1.0);
+    //g_albedo = vec4(pow(color.rgb, vec3(2.2)),1.0);
+    g_albedo = color;
 
     // extract emissive maps, convert to srgb & send them
     vec2 emissive_uvs = u_has_emissive_texcoord ? v_uv2 : v_uv;
-    vec3 emissive_map = u_has_emissive ? pow(texture(u_emissive, emissive_uvs).rgb, vec3(2.2)) * u_emissive_factor * u_emissive_strength : u_emissive_factor * u_emissive_strength;
-    g_emissive = vec4(emissive_map, 1.0);
+    vec4 emissive_map = vec4(u_emissive_factor, 1.0) * u_emissive_strength;
+    if(u_has_emissive)
+    {
+        emissive_map *= texture(u_emissive, emissive_uvs);
+    }
+    g_emissive = vec4(emissive_map);
 
     // grab normals and convert to ndc or use vertex normals as fallback
     vec3 normal = u_has_normal ? normalize(v_TBN * (texture(u_normal, v_uv * u_normal_scale).rgb * 2.0 - 1.0)) : v_TBN[2];

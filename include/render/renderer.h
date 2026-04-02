@@ -54,7 +54,6 @@ typedef struct
     GLuint g_orm; // occlusion roughness metalness thickness
     GLuint g_emissive; // idk if i should send emissive maps as separate or albedo so here they are
     GLuint g_normal;
-    GLuint g_position;
     GLuint g_depth;
     Shader light_shader; 
     Shader deferred_shader;

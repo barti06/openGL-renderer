@@ -270,15 +270,14 @@ static inline void material_load(Material* mat, cgltf_primitive* src, const char
     }
 
     // load volume
-    if (m->has_volume)
+    if ((mat->has_volume = m->has_volume))
     {
-        mat->has_volume = m->has_volume;
         mat->volume.thickness_texture = load_texture_view(&m->volume.thickness_texture, base_path, cache);
         mat->volume.thickness_factor = m->volume.thickness_factor;
         mat->volume.attenuation_distance = m->volume.attenuation_distance;
         memcpy(mat->volume.attenuation_color, m->volume.attenuation_color, sizeof(vec3));
     }
-
+    
     mat->double_sided = m->double_sided;
     mat->unlit = m->unlit;
 }

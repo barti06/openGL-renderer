@@ -39,6 +39,8 @@ typedef struct Camera
     mat4 view;
     mat4 projection;
     mat4 view_proj;
+    mat4 inv_proj;
+    mat4 inv_viewproj;
     vec4 frustum[6];
     
     int fov;
