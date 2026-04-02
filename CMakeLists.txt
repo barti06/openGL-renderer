@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 4.0)
-project(openGL-renderer VERSION 0.01 LANGUAGES C CXX)
+project(openGL-renderer LANGUAGES C CXX)
 
 if(NOT CMAKE_C_COMPILER_ID STREQUAL CMAKE_CXX_COMPILER_ID)
     message(WARNING "ERROR... C COMPILER IS ${CMAKE_C_COMPILER_ID} AND CXX COMPILER IS ${CMAKE_CXX_COMPILER_ID}.")
@@ -17,41 +17,43 @@ add_compile_definitions(
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# use std C11
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/bin/release"
     RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${CMAKE_CURRENT_SOURCE_DIR}/bin/debug"
 )
+
 #my source files
 target_sources(${PROJECT_NAME} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/main.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/implementations.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/asset/model.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/asset/primitive.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/asset/texture_loader.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/scene/camera.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/scene/world.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/scene/entity.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shader.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/renderer.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/render/shadows.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/window.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/engine.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/ui.c
+    src/main.c
+    src/implementations.c
+    src/asset/model.c
+    src/asset/primitive.c
+    src/asset/texture_loader.c
+    src/scene/camera.c
+    src/scene/world.c
+    src/scene/entity.c
+    src/render/shader.c
+    src/render/renderer.c
+    src/render/shadows.c
+    src/core/window.c
+    src/core/engine.c
+    src/core/ui.c
 )
 
 # my header files
-target_include_directories(${PROJECT_NAME} PUBLIC 
+target_include_directories(${PROJECT_NAME} PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/include/asset
     ${CMAKE_CURRENT_SOURCE_DIR}/include/core
     ${CMAKE_CURRENT_SOURCE_DIR}/include/render
     ${CMAKE_CURRENT_SOURCE_DIR}/include/scene
 )
-
-# use std C11
-target_compile_features(${PROJECT_NAME} PRIVATE c_std_11)
 
 # compiler options + optimizations 
 target_compile_options(${PROJECT_NAME} PRIVATE
