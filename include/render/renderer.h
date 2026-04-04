@@ -138,16 +138,13 @@ typedef struct
 
 typedef struct
 {
-    uint32_t brdf_LUT;
-    Shader brdf_shader;
-} brdf_t;
-
-typedef struct
-{
+    uint32_t ibl_fbo, ibl_rbo;
     Shader hdr_equirec;
     Shader hdr_bg;
     Shader irradiance_shader;
     Shader prefilter_shader;
+    uint32_t brdf_LUT;
+    Shader brdf_shader;
 } iblShared_t;
 
 typedef struct World World;
@@ -171,8 +168,7 @@ typedef struct
 
     ssao_t ssao;
 
-    uint32_t ibl_fbo, ibl_rbo;
-    brdf_t brdf;
+    
     iblShared_t ibl_shared;
     ibl_t cloud_ibl;
     ibl_t snow_ibl;

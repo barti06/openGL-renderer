@@ -83,7 +83,7 @@ void renderer_init(Renderer* renderer, int viewportX,
     shader_set_int(&ibls->hdr_bg, "u_environmentMap", 0); // tell ogl skybox tex is sent at slot 0
     shader_init(&ibls->irradiance_shader, "shaders/hdr_equirec.vert", "shaders/hdr_irr.frag");
     shader_init(&ibls->prefilter_shader, "shaders/hdr_equirec.vert", "shaders/hdr_prefilter.frag");
-    shader_init(&renderer->brdf.brdf_shader, "shaders/hdr_brdf.vert", "shaders/hdr_brdf.frag");
+    shader_init(&ibls->brdf_shader, "shaders/hdr_brdf.vert", "shaders/hdr_brdf.frag");
 
     // init fbos
     gbuffer_setup(renderer, viewportX, viewportY);
@@ -129,13 +129,13 @@ void renderer_init(Renderer* renderer, int viewportX,
 
     cube_init(renderer);
 
-    brdf_init(renderer);
     renderer->active_ibl = &renderer->cloud_ibl;
     ibl_init(renderer, "../../resources/clouds.hdr");
     renderer->active_ibl = &renderer->snow_ibl;
     ibl_init(renderer, "../../resources/snow.hdr");
     renderer->active_ibl = &renderer->studio_ibl;
     ibl_init(renderer, "../../resources/studio.hdr");
+    brdf_init(renderer);
 }
 
 void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY)
@@ -294,6 +294,7 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
 
     postEffects_t *fx = &renderer->fx;
     ibl_t *ibl = renderer->active_ibl;
+    iblShared_t *ibl_shared = &renderer->ibl_shared;
     // light pass
     glBeginQuery(GL_TIME_ELAPSED, renderer->timers.light_query);
     glBindFramebuffer(GL_FRAMEBUFFER, fx->fx_fbo);
@@ -331,7 +332,7 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     // send brdf lut
     glActiveTexture(GL_TEXTURE9);
     shader_set_int(&renderer->gbuffer.light_shader, "u_brdfLUT", 9);
-    glBindTexture(GL_TEXTURE_2D, renderer->brdf.brdf_LUT);
+    glBindTexture(GL_TEXTURE_2D, ibl_shared->brdf_LUT);
 
     // render light pass to a quad
     glBindVertexArray(renderer->quad_VAO);
@@ -342,14 +343,14 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fx->fx_fbo);
     glBlitFramebuffer(0, 0, renderer->viewportSize[0], renderer->viewportSize[1], 0, 0, renderer->viewportSize[0], renderer->viewportSize[1], GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 
-    iblShared_t *ibl_shared = &renderer->ibl_shared;
     glBindFramebuffer(GL_FRAMEBUFFER, fx->fx_fbo);
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     shader_use(&ibl_shared->hdr_bg);
     glActiveTexture(GL_TEXTURE0);
     shader_set_int(&ibl_shared->hdr_bg, "u_environmentMap", 0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, ibl->env_cubemap);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, ibl->prefilter_map);
+    //glBindTexture(GL_TEXTURE_2D, ibl->prefilter_map);
     glDisable(GL_CULL_FACE);
     cube_render(renderer->cubeVAO);
     glEnable(GL_CULL_FACE);
