@@ -135,7 +135,7 @@ void renderer_init(Renderer* renderer, int viewportX,
     renderer->active_ibl = &renderer->snow_ibl;
     ibl_init(renderer, "../../resources/snow.hdr");
     renderer->active_ibl = &renderer->studio_ibl;
-    ibl_init(renderer, "../../resources/studio2.hdr");
+    ibl_init(renderer, "../../resources/studio.hdr");
 }
 
 void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY)
