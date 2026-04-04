@@ -71,6 +71,10 @@ uniform float u_bloom_threshold;
 
 uniform bool u_ssao_enabled;
 
+uniform bool u_shadows_enabled;
+uniform float u_shadow_bias;
+uniform float u_shadow_spread;
+
 // pbr utilities
 float D_GGX(float NdotH, float roughness);
 
@@ -92,6 +96,8 @@ vec3 get_directional_light(directional_light light, vec3 N, vec3 V, vec3 albedo,
 
 float dirLight_shadow(vec4 lightSpaceVec, vec3 N, vec3 lightDir);
 
+uniform samplerCube u_irradiance_map;
+
 void main()
 {
     float depth = texture(g_depth, v_uv).r;
@@ -110,7 +116,7 @@ void main()
 
     vec4 ormt = texture(g_orm, v_uv);
     //float occlusion = ormt.r;
-    float occlusion = u_ssao_enabled ? texture(ssao, v_uv).r : 0.0;
+    float occlusion = u_ssao_enabled ? texture(ssao, v_uv).r : 1.0;
     float roughness = ormt.g;
     float metalness = ormt.b;
 
@@ -120,7 +126,7 @@ void main()
     float norm_dot_view = max(dot(normal, view_direction), 0.0);
 
     vec3 color = vec3(0.0);
-    color += emissive;
+    color = emissive;
 
     // lighting calculations
     vec3 total_light = vec3(0.0);
@@ -131,14 +137,25 @@ void main()
         total_light += get_point_light(current_pointlight, normal, position, view_direction, albedo, metalness, roughness, norm_dot_view);
     }
 
-    float dir_shadow = 0.0;
+    float dir_shadow = 1.0;
     if(u_dirlight_enabled)
     {
-        vec4 lightSpaceVec = u_lightSpaceMat * vec4(position, 1.0);
-        dir_shadow += dirLight_shadow(lightSpaceVec, normal, -u_dirlight.direction);
+        if(u_shadows_enabled)
+        {
+            vec4 lightSpaceVec = u_lightSpaceMat * vec4(position, 1.0);
+            dir_shadow = dirLight_shadow(lightSpaceVec, normal, -u_dirlight.direction);
+        }
         total_light += dir_shadow * get_directional_light(u_dirlight, normal, view_direction, albedo, metalness, roughness, norm_dot_view);
     }
-    vec3 ambient = vec3(0.05) * albedo * occlusion;
+
+
+    vec3 F0 = mix(vec3(0.04), albedo, metalness);
+    vec3 kS = F_Schlick_Roughness(max(norm_dot_view, 0.0), F0, roughness);
+    vec3 kD = 1.0 - kS;
+    vec3 irradiance = texture(u_irradiance_map, normal).rgb;
+    vec3 diffuse = irradiance * albedo;
+    vec3 ambient = vec3(0.25) * (kD * diffuse) * occlusion;
+    //vec3 ambient = vec3(0.05) * albedo * occlusion;
 
     total_light += ambient;
 
@@ -173,7 +190,6 @@ void main()
     }
 
     FragColor = vec4(color, 1.0);
-
 } 
 
 float D_GGX(float NdotH, float roughness)
@@ -288,13 +304,13 @@ float dirLight_shadow(vec4 lightSpaceVec, vec3 N, vec3 lightDir)
     // sample shadow map
     float currentDepth = projCoords.z;
     
-    float bias = 0.0001; // fixed bias i choose
+    float bias = u_shadow_bias; // fixed bias i choose
 
     float shadow = 0.0;
 
     // PCF
     vec2 texelSize = 1.0 / textureSize(u_shadowMap, 0);
-    float spread = 2.5; // should move this as a uniform
+    float spread = u_shadow_spread; // should move this as a uniform
 
     for(int i = 0; i < 16; i++)
     {

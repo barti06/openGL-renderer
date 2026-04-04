@@ -132,6 +132,7 @@ int model_load(Model* model, const char* location)
         
             Primitive* dest_primitive = &dest_mesh->primitives[dest_mesh->primitive_count];
 
+            // grab the mesh aabb
             glm_vec3_minv(dest_mesh->aabb[0], src_primitive->attributes->data->min, dest_mesh->aabb[0]);
             glm_vec3_maxv(dest_mesh->aabb[1], src_primitive->attributes->data->max, dest_mesh->aabb[1]);
 

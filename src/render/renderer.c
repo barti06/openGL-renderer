@@ -40,11 +40,14 @@ void renderer_init(Renderer* renderer, int viewportX,
 	}
 
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthFunc(GL_LEQUAL); // for skybox
 
     renderer->nearZ = DEFAULT_NEARZ;
     renderer->farZ = DEFAULT_FARZ;
+
     renderer->viewportSize[0] = viewportX;
     renderer->viewportSize[1] = viewportY;
+
     // init deferred and forward shaders
 	shader_init(&renderer->gbuffer.deferred_shader, "shaders/geometry.vert", "shaders/deferred.frag");
     shader_init(&renderer->shadowMap_shader, "shaders/geometry_shadowMap.vert", "shaders/shadowMap.frag");
@@ -72,6 +75,14 @@ void renderer_init(Renderer* renderer, int viewportX,
     shader_init(&renderer->ssao.ssao_shader, "shaders/quad.vert", "shaders/hbao.frag");
     shader_init(&renderer->ssao.ssao_blur_shader, "shaders/quad.vert", "shaders/ssao_blur.frag");
     
+    ibl_t *ibl = &renderer->ibl;
+    // skybox shaders
+    shader_init(&ibl->hdr_equirec, "shaders/hdr_equirec.vert", "shaders/hdr_equirec.frag");
+    shader_init(&ibl->hdr_bg, "shaders/hdr_bg.vert", "shaders/hdr_bg.frag");
+    shader_use(&ibl->hdr_bg);
+    shader_set_int(&ibl->hdr_bg, "u_environmentMap", 0); // tell ogl skybox tex is sent at slot 0
+    shader_init(&ibl->irradiance_shader, "shaders/hdr_equirec.vert", "shaders/hdr_irr.frag");
+
     // init fbos
     gbuffer_setup(renderer, viewportX, viewportY);
     postFX_setup(renderer, viewportX, viewportY);
@@ -107,10 +118,15 @@ void renderer_init(Renderer* renderer, int viewportX,
     glGenQueries(1, &rt->fx_query);
     glGenQueries(1, &rt->ssao_query);
     glGenQueries(1, &rt->ssao_blur_query);
+    glGenQueries(1, &rt->shadow_query);
     rt->stats_update_interval = 0.25f; // updates imgui timers four times a second
     rt->stats_timer = 0.0f;
 
     shadowMap_init(&renderer->shadow);
+
+    cube_init(renderer);
+
+    ibl_init(renderer, "cloudy.hdr");
 }
 
 void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY)
@@ -131,6 +147,11 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
     shader_set_mat4(renderer->active_shader, "u_view", world->camera.view);
     shader_set_mat4(renderer->active_shader, "u_projection", world->camera.projection);
 
+    ibl_t *ibl = &renderer->ibl;
+    shader_use(&ibl->hdr_bg);
+    shader_set_mat4(&ibl->hdr_bg, "u_projection", world->camera.projection);
+    shader_set_mat4(&ibl->hdr_bg, "u_view", world->camera.view);
+
     renderSettings_t *rs = &renderer->settings;
     shader_use(&renderer->gbuffer.light_shader);
     shader_set_mat4(&renderer->gbuffer.light_shader, "u_inv_viewproj", world->camera.inv_viewproj);
@@ -138,6 +159,9 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
     shader_set_int(&renderer->gbuffer.light_shader, "u_gbuffer_view", rs->gbuffer_view);
     shader_set_float(&renderer->gbuffer.light_shader, "u_bloom_threshold", rs->bloom_threshold);
     shader_set_bool(&renderer->gbuffer.light_shader, "u_ssao_enabled", rs->ssao_enabled);
+    shader_set_bool(&renderer->gbuffer.light_shader, "u_shadows_enabled", renderer->settings.shadows_enabled);
+    shader_set_float(&renderer->gbuffer.light_shader, "u_shadow_bias", renderer->settings.shadows_bias);
+    shader_set_float(&renderer->gbuffer.light_shader, "u_shadow_spread", renderer->settings.shadows_spread);
 
     ssao_t *ssao = &renderer->ssao;
     shader_use(&ssao->ssao_shader);
@@ -157,7 +181,9 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
 
 void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
 {
+
     // shadow pass
+    glBeginQuery(GL_TIME_ELAPSED, renderer->timers.shadow_query);
     if(world->update_shadow)
     {
         glBindFramebuffer(GL_FRAMEBUFFER, renderer->shadow.fbo);
@@ -178,11 +204,13 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         world->update_shadow = false;
     }
+    glEndQuery(GL_TIME_ELAPSED);
+
     // gpass
     glViewport(0, 0, renderer->viewportSize[0], renderer->viewportSize[1]);
     glBeginQuery(GL_TIME_ELAPSED, renderer->timers.geometry_query);
     glBindFramebuffer(GL_FRAMEBUFFER, renderer->gbuffer.gBuffer_fbo);
-    glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     for(size_t index = 0; index < world->entities_count; index++)
     {
@@ -242,6 +270,7 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     glEndQuery(GL_TIME_ELAPSED);
 
     postEffects_t *fx = &renderer->fx;
+    ibl_t *ibl = &renderer->ibl;
     // light pass
     glBeginQuery(GL_TIME_ELAPSED, renderer->timers.light_query);
     glBindFramebuffer(GL_FRAMEBUFFER, fx->fx_fbo);
@@ -266,17 +295,41 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     // send ssao texture
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, ssao->ssao_blur_texture);
+    // send shadow
     shadowMap_send(&renderer->gbuffer.light_shader, 6, &renderer->shadow);
+    // send irradiance
+    glActiveTexture(GL_TEXTURE7);
+    shader_set_int(&renderer->gbuffer.light_shader, "u_irradiance_map", 7);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, ibl->irradianceMap);
+
     // render light pass to a quad
     glBindVertexArray(renderer->quad_VAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
+
+    // skybox pass
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, renderer->gbuffer.gBuffer_fbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fx->fx_fbo);
+    glBlitFramebuffer(0, 0, renderer->viewportSize[0], renderer->viewportSize[1], 0, 0, renderer->viewportSize[0], renderer->viewportSize[1], GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, fx->fx_fbo);
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    shader_use(&ibl->hdr_bg);
+    glActiveTexture(GL_TEXTURE0);
+    shader_set_int(&ibl->hdr_bg, "u_environmentMap", 0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, ibl->env_cubemap);
+    glDisable(GL_CULL_FACE);
+    cube_render(renderer->cubeVAO);
+    glEnable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glEndQuery(GL_TIME_ELAPSED);
 
     glBeginQuery(GL_TIME_ELAPSED, renderer->timers.fx_query);
+    // bloom pass
     renderSettings_t *rs = &renderer->settings;
     bloom_t *b = &renderer->bloom;
-    // bloom pass (should make a query 4 it)
     if(rs->bloom_enabled)
     {
         // pingpong blur
@@ -299,6 +352,7 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
 
     // postFX pass
     glClear(GL_COLOR_BUFFER_BIT);
+    glDisable(GL_DEPTH_TEST);
     shader_use(&fx->fx_shader);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, fx->fx_scene);
@@ -313,18 +367,21 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
 
     renderTimers_t *rt = &renderer->timers;
 
-    GLuint64 time_geometry, time_light, time_fx, time_ssao, time_ssao_blur;
+    GLuint64 time_geometry, time_light, time_fx, time_ssao, time_ssao_blur, time_shadows;
     glGetQueryObjectui64v(rt->geometry_query, GL_QUERY_RESULT, &time_geometry);
     glGetQueryObjectui64v(rt->light_query, GL_QUERY_RESULT, &time_light);
     glGetQueryObjectui64v(rt->fx_query, GL_QUERY_RESULT, &time_fx);
     glGetQueryObjectui64v(rt->ssao_query, GL_QUERY_RESULT, &time_ssao);
     glGetQueryObjectui64v(rt->ssao_blur_query, GL_QUERY_RESULT, &time_ssao_blur);
+    glGetQueryObjectui64v(rt->shadow_query, GL_QUERY_RESULT, &time_shadows);
 
-    float geometry_display = time_geometry / 1000000.0;
-    float light_display = time_light / 1000000.0;
-    float fx_display = time_fx / 1000000.0;
-    float ssao_display = time_ssao / 1000000.0;
-    float ssao_blur_display = time_ssao_blur / 1000000.0;
+#define MILISECONDS 1000000.0
+    float geometry_display = time_geometry / MILISECONDS;
+    float light_display = time_light / MILISECONDS;
+    float fx_display = time_fx / MILISECONDS;
+    float ssao_display = time_ssao / MILISECONDS;
+    float ssao_blur_display = time_ssao_blur / MILISECONDS;
+    float shadow_display = time_shadows / MILISECONDS;
     rt->stats_timer += delta_time;
     if (rt->stats_timer >= rt->stats_update_interval)
     {
@@ -334,6 +391,7 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
         rt->stats_fx_ms = fx_display;
         rt->stats_ssao_ms = ssao_display;
         rt->stats_ssao_blur_ms = ssao_blur_display;
+        rt->stats_shadows_ms = shadow_display;
         rt->stats_timer = 0.0f;
     }
 }
@@ -362,13 +420,6 @@ void renderer_gbuffer_reload(Renderer* renderer)
     shader_set_int(ds, "u_iridescence", 5);
     shader_set_int(ds, "u_iridescence_thickness", 6);
     shader_set_int(ds, "u_volume_thickness", 7);
-}
-void renderer_gbuffer_update(Renderer* renderer, vec3 camera_pos)
-{
-    shader_use(&renderer->gbuffer.light_shader);
-    // this function is not too long and probably should just say this directly on renderer update but wtv
-    shader_set_vec3(&renderer->gbuffer.light_shader, "u_camera_position", camera_pos);
-    shader_set_int(&renderer->gbuffer.light_shader, "u_gbuffer_view", (int32_t)renderer->settings.gbuffer_view);
 }
 
 void renderer_postfx_reload(Renderer* renderer)
@@ -439,6 +490,7 @@ void renderer_ui(Renderer* renderer)
     igText("SSAO pass: %.3f ms", renderer->timers.stats_ssao_ms);
     igText("SSAO blur pass: %.3f ms", renderer->timers.stats_ssao_blur_ms);
     igText("Post-Processing pass: %.3f ms", renderer->timers.stats_fx_ms);
+    igText("Shadows pass: %.3f", renderer->timers.stats_shadows_ms);
     igSeparator();
 
     renderSettings_t *rs = &renderer->settings;
@@ -471,12 +523,19 @@ void renderer_ui(Renderer* renderer)
             igSliderInt("Bloom blur passes", &rs->bloom_blur_passes, 0, 100, "%d", 0);
         }
         igCheckbox("SSAO", &rs->ssao_enabled);
+        if(rs->ssao_enabled)
         {
             igSliderFloat("SSAO strength", &rs->ssao_strength, 0.0f, 20.0f, "%.1f", 0);
             igSliderFloat("SSAO bias", &rs->ssao_bias, 0.0f, 1.0f, "%.3f", 0);
             igSliderFloat("SSAO radius", &rs->ssao_radius, 0.0f, 10.0f, "%.1f", 0);
             igSliderInt("SSAO directions", &rs->hbao_directions, 0, 50, "%d", 0);
             igSliderInt("SSAO steps", &rs->hbao_steps, 0, 50, "%d", 0);
+        }
+        igCheckbox("Shadows", &rs->shadows_enabled);
+        if(rs->shadows_enabled)
+        {
+            igSliderFloat("Shadow bias", &rs->shadows_bias, 0.0f, 0.025f, "%.4f", 0);
+            igSliderFloat("Shadow spread", &rs->shadows_spread, 0.5f, 3.0f, "%.1f", 0);
         }
     }
     igEnd();
@@ -489,29 +548,30 @@ static inline void renderer_model_draw(const Model* model, Renderer* renderer, m
         return;
 
     Shader* shader = renderer->active_shader;
-
     // activate the shader
     shader_use(shader);
     // draw each primitive from a model
     for (uint32_t mi = 0; mi < model->mesh_count; mi++)
     {
         const Mesh* mesh = &model->meshes[mi];
-        vec3 aabb[2];
-        glm_aabb_transform(mesh->aabb, world_matrix, aabb);
-        if(!glm_aabb_frustum(aabb, camera->frustum))
+        
+        vec3 m_aabb[2];
+        glm_aabb_transform(mesh->aabb, world_matrix, m_aabb);
+        if(!glm_aabb_frustum(m_aabb, camera->frustum))
             continue;
-
+        
         // multiply each model's mesh matrix by the world matrix of the entity that owns them
         mat4 final_transform;
         // avx makes EVERYTHING explode and i am too lazy to be bothered to fix it :D
         glm_mat4_mul_sse2(world_matrix, (vec4*)mesh->transform, final_transform);
-
         shader_set_mat4(shader, "u_model", final_transform);
         
         for(uint32_t pi = 0; pi < mesh->primitive_count; pi++)
         {
             const Primitive* current_primitive = &mesh->primitives[pi];
-            
+            if(current_primitive->material.has_transmission)
+                continue;
+
             bool has_albedo = false;
             bool has_metallic_roughness = false;
             bool has_normal = false;
@@ -590,7 +650,9 @@ static inline void renderer_model_draw(const Model* model, Renderer* renderer, m
             shader_set_bool(shader, "u_has_ao", has_ao);
 
             shader_set_bool(shader, "u_has_iridescence", current_primitive->material.has_iridescence);
+
             shader_set_bool(shader, "u_has_volume", current_primitive->material.has_volume);
+            
             shader_set_bool(shader, "u_unlit", current_primitive->material.unlit);
 
             glActiveTexture(GL_TEXTURE0);

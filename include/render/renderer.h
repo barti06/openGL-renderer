@@ -36,6 +36,7 @@ typedef struct
     GLuint fx_query;
     GLuint ssao_query;
     GLuint ssao_blur_query;
+    GLuint shadow_query;
 
     float stats_timer;
     float stats_update_interval;
@@ -44,6 +45,7 @@ typedef struct
     float stats_fx_ms;
     float stats_ssao_ms;
     float stats_ssao_blur_ms;
+    float stats_shadows_ms;
     float stats_fps;
 } renderTimers_t;
 
@@ -83,6 +85,10 @@ typedef struct
     int hbao_directions;
     int hbao_steps;
     bool ssao_enabled;
+    // shadow settings
+    bool shadows_enabled;
+    float shadows_bias;
+    float shadows_spread;
 } renderSettings_t;
 
 typedef struct 
@@ -113,6 +119,17 @@ typedef struct
     Shader fx_shader;
 } postEffects_t;
 
+typedef struct
+{
+    //skybox data
+    uint32_t capture_fbo, capture_rbo;
+    uint32_t env_cubemap;
+    uint32_t irradianceMap;
+    Shader hdr_equirec;
+    Shader hdr_bg;
+    Shader irradiance_shader;
+} ibl_t;
+
 typedef struct World World;
 
 typedef struct
@@ -134,12 +151,17 @@ typedef struct
 
     ssao_t ssao;
 
+    ibl_t ibl;
+
     shadowMap_t shadow;
     Shader shadowMap_shader;
 
     // the drawing quad + shaders
     GLuint quad_VAO;
     GLuint quad_VBO;
+
+    GLuint cubeVAO;
+    GLuint cubeVBO;
 } Renderer;
 
 void renderer_init(Renderer* renderer, 

@@ -41,7 +41,9 @@ vec3 chromatic_aberration(sampler2D tex, vec2 uv, float intensity);
 
 void main()
 {
-    if(u_gbuffer_viewing)
+    float depth = texture(fx_depth, v_uv).r;
+
+    if(u_gbuffer_viewing || depth == 1.0)
     {
         FragColor = vec4(texture(fx_scene, v_uv).rgb, 1.0);
         return;

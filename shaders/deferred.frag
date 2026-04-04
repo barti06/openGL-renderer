@@ -20,6 +20,7 @@ uniform sampler2D u_ao;
 uniform sampler2D u_iridescence;
 uniform sampler2D u_iridescence_thickness;
 uniform sampler2D u_volume_thickness;
+uniform sampler2D u_transmission;
 
 uniform bool u_has_albedo;
 uniform bool u_has_metallic_roughness;
@@ -28,6 +29,7 @@ uniform bool u_has_emissive;
 uniform bool u_has_emissive_texcoord;
 uniform bool u_has_ao;
 uniform bool u_has_occlusion_texcoord;
+uniform bool u_has_transmission;
 uniform bool u_unlit;
 
 uniform vec4 u_albedo_factor;
@@ -40,6 +42,8 @@ uniform vec2 u_normal_scale;
 
 uniform float u_emissive_strength;
 uniform vec3 u_emissive_factor;
+
+uniform float u_transmission_factor;
 
 //uniform bool u_has_iridescence;
 //uniform bool u_has_volume;
@@ -54,21 +58,20 @@ void main()
     vec4 color = vec4(u_albedo_factor);
     if(u_has_albedo)
     {
-        color *= pow(texture(u_albedo, v_uv), vec4(2.2));
+        color *= texture(u_albedo, v_uv);
     }
 
     if(color.a < 0.1)
         discard;
     // linear to srgb & send albedo
-    //g_albedo = vec4(pow(color.rgb, vec3(2.2)),1.0);
-    g_albedo = color;
+    g_albedo = vec4(pow(color.rgb, vec3(2.2)),1.0);
 
     // extract emissive maps, convert to srgb & send them
     vec2 emissive_uvs = u_has_emissive_texcoord ? v_uv2 : v_uv;
     vec4 emissive_map = vec4(u_emissive_factor, 1.0) * u_emissive_strength;
     if(u_has_emissive)
     {
-        emissive_map *= texture(u_emissive, emissive_uvs);
+        emissive_map *= pow(texture(u_emissive, emissive_uvs), vec4(2.2));
     }
     g_emissive = vec4(emissive_map);
 

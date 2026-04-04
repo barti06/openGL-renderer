@@ -33,7 +33,7 @@ World* world_create(void)
     world->current_event = WORLD_EVENT_NONE;
     world->dirlight_inten = 1.0f;
     glm_vec3_dup((vec3)GLM_VEC3_ONE_INIT, world->directional.diffuse);
-    glm_vec3_dup(((vec3){0.25f, -1.0f, -0.15f}), world->dirlight_dir);
+    glm_vec3_dup(((vec3){-0.60f, -0.75f, -0.35f}), world->dirlight_dir);
     world->enable_directional_light = true;
     world->update_shadow = true;
 

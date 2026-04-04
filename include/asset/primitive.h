@@ -68,6 +68,12 @@ typedef struct MaterialVolume
     vec3 attenuation_color;
 } MaterialVolume;
 
+typedef struct 
+{
+    GLuint transmission_texture;
+    float transmission_factor;
+} MaterialTransmission;
+
 typedef struct Material
 {
     MaterialPBR pbr;
@@ -85,6 +91,9 @@ typedef struct Material
 
     bool has_volume;
     MaterialVolume volume;
+
+    bool has_transmission;
+    MaterialTransmission transmission;
 
     bool double_sided;
     bool unlit;

@@ -1,4 +1,5 @@
 #include "primitive.h"
+#include <cglm/cglm.h>
 #include <log.h>
 #include <string.h>
 #include <malloc.h>
@@ -276,6 +277,13 @@ static inline void material_load(Material* mat, cgltf_primitive* src, const char
         mat->volume.thickness_factor = m->volume.thickness_factor;
         mat->volume.attenuation_distance = m->volume.attenuation_distance;
         memcpy(mat->volume.attenuation_color, m->volume.attenuation_color, sizeof(vec3));
+    }
+
+    // load transmission (glass)
+    if ((mat->has_transmission = m->has_transmission))
+    {
+        mat->transmission.transmission_factor = m->transmission.transmission_factor;
+        mat->transmission.transmission_texture = load_texture_view(&m->transmission.transmission_texture, base_path, cache);
     }
     
     mat->double_sided = m->double_sided;

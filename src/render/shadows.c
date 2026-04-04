@@ -2,9 +2,9 @@
 #include "shader.h"
 
 #define SHADOWMAP_RES 16384
-#define SHADOWMAP_DIR_SIZE 50.0f
+#define SHADOWMAP_DIR_SIZE 100.0f
 #define SHADOWMAP_NEAR 1.0f
-#define SHADOWMAP_FAR 200.0f
+#define SHADOWMAP_FAR 400.0f
 
 void shadowMap_init(shadowMap_t *shadowmap)
 {

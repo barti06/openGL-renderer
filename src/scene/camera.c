@@ -150,5 +150,5 @@ void camera_update_matrices(Camera* camera, vec2 viewportSize, float nearZ, floa
 
     // get inverse matrices
     glm_mat4_inv(camera->projection, camera->inv_proj);
-    glm_mat4_inv(camera->view_proj, camera->inv_viewproj);
+    glm_mat4_inv_fast(camera->view_proj, camera->inv_viewproj);
 }
