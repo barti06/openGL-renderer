@@ -75,15 +75,15 @@ void renderer_init(Renderer* renderer, int viewportX,
     shader_init(&renderer->ssao.ssao_shader, "shaders/quad.vert", "shaders/hbao.frag");
     shader_init(&renderer->ssao.ssao_blur_shader, "shaders/quad.vert", "shaders/ssao_blur.frag");
     
-    ibl_t *ibl = &renderer->ibl;
+    iblShared_t *ibls = &renderer->ibl_shared;
     // skybox shaders
-    shader_init(&ibl->hdr_equirec, "shaders/hdr_equirec.vert", "shaders/hdr_equirec.frag");// hdr_equirrec is the cubemap shader
-    shader_init(&ibl->hdr_bg, "shaders/hdr_bg.vert", "shaders/hdr_bg.frag");
-    shader_use(&ibl->hdr_bg);
-    shader_set_int(&ibl->hdr_bg, "u_environmentMap", 0); // tell ogl skybox tex is sent at slot 0
-    shader_init(&ibl->irradiance_shader, "shaders/hdr_equirec.vert", "shaders/hdr_irr.frag");
-    shader_init(&ibl->prefilter_shader, "shaders/hdr_equirec.vert", "shaders/hdr_prefilter.frag");
-    shader_init(&ibl->brdf_shader, "shaders/hdr_brdf.vert", "shaders/hdr_brdf.frag");
+    shader_init(&ibls->hdr_equirec, "shaders/hdr_equirec.vert", "shaders/hdr_equirec.frag");// hdr_equirrec is the cubemap shader
+    shader_init(&ibls->hdr_bg, "shaders/hdr_bg.vert", "shaders/hdr_bg.frag");
+    shader_use(&ibls->hdr_bg);
+    shader_set_int(&ibls->hdr_bg, "u_environmentMap", 0); // tell ogl skybox tex is sent at slot 0
+    shader_init(&ibls->irradiance_shader, "shaders/hdr_equirec.vert", "shaders/hdr_irr.frag");
+    shader_init(&ibls->prefilter_shader, "shaders/hdr_equirec.vert", "shaders/hdr_prefilter.frag");
+    shader_init(&renderer->brdf.brdf_shader, "shaders/hdr_brdf.vert", "shaders/hdr_brdf.frag");
 
     // init fbos
     gbuffer_setup(renderer, viewportX, viewportY);
@@ -112,6 +112,7 @@ void renderer_init(Renderer* renderer, int viewportX,
     rs->bloom_threshold = 0.2f;
     rs->bloom_strength = 1.0f;
     rs->bloom_blur_passes = 5;
+    rs->ibl_selected = IBL_SELECTION_CLOUDS;
 
     // for gpu timings
     renderTimers_t *rt = &renderer->timers;
@@ -128,7 +129,13 @@ void renderer_init(Renderer* renderer, int viewportX,
 
     cube_init(renderer);
 
-    ibl_init(renderer, "cloudy.hdr");
+    brdf_init(renderer);
+    renderer->active_ibl = &renderer->cloud_ibl;
+    ibl_init(renderer, "../../resources/clouds.hdr");
+    renderer->active_ibl = &renderer->snow_ibl;
+    ibl_init(renderer, "../../resources/snow.hdr");
+    renderer->active_ibl = &renderer->studio_ibl;
+    ibl_init(renderer, "../../resources/studio2.hdr");
 }
 
 void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY)
@@ -149,10 +156,10 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
     shader_set_mat4(renderer->active_shader, "u_view", world->camera.view);
     shader_set_mat4(renderer->active_shader, "u_projection", world->camera.projection);
 
-    ibl_t *ibl = &renderer->ibl;
-    shader_use(&ibl->hdr_bg);
-    shader_set_mat4(&ibl->hdr_bg, "u_projection", world->camera.projection);
-    shader_set_mat4(&ibl->hdr_bg, "u_view", world->camera.view);
+    iblShared_t *ibls = &renderer->ibl_shared;
+    shader_use(&ibls->hdr_bg);
+    shader_set_mat4(&ibls->hdr_bg, "u_projection", world->camera.projection);
+    shader_set_mat4(&ibls->hdr_bg, "u_view", world->camera.view);
 
     renderSettings_t *rs = &renderer->settings;
     shader_use(&renderer->gbuffer.light_shader);
@@ -164,6 +171,20 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
     shader_set_bool(&renderer->gbuffer.light_shader, "u_shadows_enabled", renderer->settings.shadows_enabled);
     shader_set_float(&renderer->gbuffer.light_shader, "u_shadow_bias", renderer->settings.shadows_bias);
     shader_set_float(&renderer->gbuffer.light_shader, "u_shadow_spread", renderer->settings.shadows_spread);
+    switch(rs->ibl_selected)
+    {
+        case IBL_SELECTION_CLOUDS:
+        renderer->active_ibl = &renderer->cloud_ibl;
+        break;
+        case IBL_SELECTION_SNOW:
+        renderer->active_ibl = &renderer->snow_ibl;
+        break;
+        case IBL_SELECTION_STUDIO:
+        renderer->active_ibl = &renderer->studio_ibl;
+        break;
+        default:
+        break;
+    }
 
     ssao_t *ssao = &renderer->ssao;
     shader_use(&ssao->ssao_shader);
@@ -272,7 +293,7 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     glEndQuery(GL_TIME_ELAPSED);
 
     postEffects_t *fx = &renderer->fx;
-    ibl_t *ibl = &renderer->ibl;
+    ibl_t *ibl = renderer->active_ibl;
     // light pass
     glBeginQuery(GL_TIME_ELAPSED, renderer->timers.light_query);
     glBindFramebuffer(GL_FRAMEBUFFER, fx->fx_fbo);
@@ -310,7 +331,7 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     // send brdf lut
     glActiveTexture(GL_TEXTURE9);
     shader_set_int(&renderer->gbuffer.light_shader, "u_brdfLUT", 9);
-    glBindTexture(GL_TEXTURE_2D, ibl->brdf_LUT);
+    glBindTexture(GL_TEXTURE_2D, renderer->brdf.brdf_LUT);
 
     // render light pass to a quad
     glBindVertexArray(renderer->quad_VAO);
@@ -321,12 +342,13 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fx->fx_fbo);
     glBlitFramebuffer(0, 0, renderer->viewportSize[0], renderer->viewportSize[1], 0, 0, renderer->viewportSize[0], renderer->viewportSize[1], GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 
+    iblShared_t *ibl_shared = &renderer->ibl_shared;
     glBindFramebuffer(GL_FRAMEBUFFER, fx->fx_fbo);
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
-    shader_use(&ibl->hdr_bg);
+    shader_use(&ibl_shared->hdr_bg);
     glActiveTexture(GL_TEXTURE0);
-    shader_set_int(&ibl->hdr_bg, "u_environmentMap", 0);
+    shader_set_int(&ibl_shared->hdr_bg, "u_environmentMap", 0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, ibl->env_cubemap);
     glDisable(GL_CULL_FACE);
     cube_render(renderer->cubeVAO);
@@ -491,6 +513,12 @@ const char* rendering_pipelines[] = {
     "Deferred"
 };
 
+const char *IBL_options [] = {
+    "Clouds",
+    "Snow",
+    "Studio"
+};
+
 void renderer_ui(Renderer* renderer)
 {
     igBegin("Renderer", NULL, 0);
@@ -505,15 +533,22 @@ void renderer_ui(Renderer* renderer)
 
     renderSettings_t *rs = &renderer->settings;
 
-    bool pipeline_open = igCollapsingHeader_TreeNodeFlags("Pipeline", 0);
+    bool ibl_open = igCollapsingHeader_TreeNodeFlags("IBL", 0);
+    if(ibl_open)
+    {
+        igCombo_Str_arr("Current IBL", &rs->ibl_selected, IBL_options, IBL_SELECTION_MAX, -1);
+        igSeparator();
+    }
+
+    bool pipeline_open = igCollapsingHeader_TreeNodeFlags("Debug view", 0);
     if(pipeline_open)
     {
         igCombo_Str_arr("GBuffer view", &rs->gbuffer_view, gbuffer_options, GBUFFER_MAX, -1);
         igSeparator();
     }
 
-    bool settings_open = igCollapsingHeader_TreeNodeFlags("Renderer settings", 0);
-    if(settings_open)
+    bool graphics_open = igCollapsingHeader_TreeNodeFlags("Graphics settings", 0);
+    if(graphics_open)
     {
         igCombo_Str_arr("Tone mapper", &rs->tonemap, tonemap_options, TONEMAP_MAX, -1);
         igSliderFloat("Gamma", &rs->gamma, 0.0f, 3.0f, "%.1f", 0);

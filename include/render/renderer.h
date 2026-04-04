@@ -61,6 +61,14 @@ typedef struct
     Shader deferred_shader;
 } gBuffer_t;
 
+typedef enum
+{
+    IBL_SELECTION_CLOUDS,
+    IBL_SELECTION_SNOW,
+    IBL_SELECTION_STUDIO,
+    IBL_SELECTION_MAX
+} iblSelection_t;
+
 typedef struct
 {
     // various rendering related settings
@@ -89,6 +97,7 @@ typedef struct
     bool shadows_enabled;
     float shadows_bias;
     float shadows_spread;
+    iblSelection_t ibl_selected;
 } renderSettings_t;
 
 typedef struct 
@@ -122,17 +131,24 @@ typedef struct
 typedef struct
 {
     //skybox data
-    uint32_t capture_fbo, capture_rbo;
     uint32_t env_cubemap;
     uint32_t irradianceMap;
     uint32_t prefilter_map;
+} ibl_t;
+
+typedef struct
+{
     uint32_t brdf_LUT;
+    Shader brdf_shader;
+} brdf_t;
+
+typedef struct
+{
     Shader hdr_equirec;
     Shader hdr_bg;
     Shader irradiance_shader;
     Shader prefilter_shader;
-    Shader brdf_shader;
-} ibl_t;
+} iblShared_t;
 
 typedef struct World World;
 
@@ -155,7 +171,13 @@ typedef struct
 
     ssao_t ssao;
 
-    ibl_t ibl;
+    uint32_t ibl_fbo, ibl_rbo;
+    brdf_t brdf;
+    iblShared_t ibl_shared;
+    ibl_t cloud_ibl;
+    ibl_t snow_ibl;
+    ibl_t studio_ibl;
+    ibl_t *active_ibl;
 
     shadowMap_t shadow;
     Shader shadowMap_shader;

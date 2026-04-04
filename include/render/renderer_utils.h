@@ -377,9 +377,12 @@ static inline void cube_render(GLuint cvao)
 }
 
 #include <stb_image.h>
+// initializes the active ibl from the renderer
 static inline void ibl_init(Renderer *renderer, const char *hdr_name)
 {
-    ibl_t *ibl = &renderer->ibl;
+    ibl_t *ibl = renderer->active_ibl;
+    iblShared_t *ibls = &renderer->ibl_shared;
+    //ibl_t *ibl = &renderer->ibl;
     glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
     stbi_set_flip_vertically_on_load(true);
     int32_t w, h, nrComponents;
@@ -404,13 +407,13 @@ static inline void ibl_init(Renderer *renderer, const char *hdr_name)
         log_error("COULDN'T LOAD HDR IMAGE!");
     } 
     stbi_set_flip_vertically_on_load(false);
-#define HDR_SKYBOX_RES 2048
-    glGenFramebuffers(1, &ibl->capture_fbo);
-    glGenRenderbuffers(1, &ibl->capture_rbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, ibl->capture_fbo);
-    glBindRenderbuffer(GL_RENDERBUFFER, ibl->capture_rbo);
+#define HDR_SKYBOX_RES 3840
+    glGenFramebuffers(1, &renderer->ibl_fbo);
+    glGenRenderbuffers(1, &renderer->ibl_rbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->ibl_fbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, renderer->ibl_rbo);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, HDR_SKYBOX_RES, HDR_SKYBOX_RES);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, ibl->capture_rbo);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, renderer->ibl_rbo);
 
     glGenTextures(1, &ibl->env_cubemap);
     glBindTexture(GL_TEXTURE_CUBE_MAP, ibl->env_cubemap);
@@ -437,19 +440,19 @@ static inline void ibl_init(Renderer *renderer, const char *hdr_name)
     glm_lookat(((vec3){0.0f, 0.0f, 0.0f}), ((vec3){0.0f,  0.0f,  -1.0f}), ((vec3){0.0f, -1.0f,  0.0f}), captureViews[5]);
 
     // convert HDR equirectangular environment map to cubemap equivalent
-    shader_use(&ibl->hdr_equirec);
-    shader_set_int(&ibl->hdr_equirec, "u_equirectangularMap", 0);
-    shader_set_mat4(&ibl->hdr_equirec, "u_projection", captureProjection);
+    shader_use(&ibls->hdr_equirec);
+    shader_set_int(&ibls->hdr_equirec, "u_equirectangularMap", 0);
+    shader_set_mat4(&ibls->hdr_equirec, "u_projection", captureProjection);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, ibl->env_cubemap);
 
     glViewport(0, 0, HDR_SKYBOX_RES, HDR_SKYBOX_RES);
-    glBindFramebuffer(GL_FRAMEBUFFER, ibl->capture_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->ibl_fbo);
 
     for (unsigned int i = 0; i < 6; ++i)
     {
-        shader_set_mat4(&ibl->hdr_equirec, "u_view", captureViews[i]);
+        shader_set_mat4(&ibls->hdr_equirec, "u_view", captureViews[i]);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, ibl->env_cubemap, 0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -458,7 +461,7 @@ static inline void ibl_init(Renderer *renderer, const char *hdr_name)
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // irradiance texture
-#define IRRADIANCE_RES 64
+#define IRRADIANCE_RES 32
     glGenTextures(1, &ibl->irradianceMap);
     glBindTexture(GL_TEXTURE_CUBE_MAP, ibl->irradianceMap);
     for (unsigned int i = 0; i < 6; ++i)
@@ -472,21 +475,21 @@ static inline void ibl_init(Renderer *renderer, const char *hdr_name)
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     // irradiance map generator
-    glBindFramebuffer(GL_FRAMEBUFFER, ibl->capture_fbo);
-    glBindRenderbuffer(GL_RENDERBUFFER, ibl->capture_rbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->ibl_fbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, renderer->ibl_rbo);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, IRRADIANCE_RES, IRRADIANCE_RES);
 
-    shader_use(&ibl->irradiance_shader);
-    shader_set_int(&ibl->irradiance_shader, "u_environmentMap", 0);
-    shader_set_mat4(&ibl->irradiance_shader, "u_projection", captureProjection);
+    shader_use(&ibls->irradiance_shader);
+    shader_set_int(&ibls->irradiance_shader, "u_environmentMap", 0);
+    shader_set_mat4(&ibls->irradiance_shader, "u_projection", captureProjection);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, ibl->env_cubemap);
 
     glViewport(0, 0, IRRADIANCE_RES, IRRADIANCE_RES); 
-    glBindFramebuffer(GL_FRAMEBUFFER, ibl->capture_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->ibl_fbo);
     for (unsigned int i = 0; i < 6; ++i)
     {
-        shader_set_mat4(&ibl->irradiance_shader, "u_view", captureViews[i]);
+        shader_set_mat4(&ibls->irradiance_shader, "u_view", captureViews[i]);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, ibl->irradianceMap, 0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -509,28 +512,28 @@ static inline void ibl_init(Renderer *renderer, const char *hdr_name)
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
 
-    shader_use(&ibl->prefilter_shader);
-    shader_set_int(&ibl->prefilter_shader, "u_environmentMap", 0);
-    shader_set_mat4(&ibl->prefilter_shader, "u_projection", captureProjection);
+    shader_use(&ibls->prefilter_shader);
+    shader_set_int(&ibls->prefilter_shader, "u_environmentMap", 0);
+    shader_set_mat4(&ibls->prefilter_shader, "u_projection", captureProjection);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, ibl->env_cubemap);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, ibl->capture_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->ibl_fbo);
     uint32_t maxMipLevels = 5;
     for (uint32_t mip = 0; mip < maxMipLevels; ++mip)
     {
         // resize framebuffer according to mip level size
         uint32_t mipWidth  = SPECULAR_RES * pow(0.5, mip);
         uint32_t mipHeight = SPECULAR_RES * pow(0.5, mip);
-        glBindRenderbuffer(GL_RENDERBUFFER, ibl->capture_rbo);
+        glBindRenderbuffer(GL_RENDERBUFFER, renderer->ibl_rbo);
         glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, mipWidth, mipHeight);
         glViewport(0, 0, mipWidth, mipHeight);
 
         float roughness = (float)mip / (float)(maxMipLevels - 1);
-        shader_set_float(&ibl->prefilter_shader, "u_roughness", roughness);
+        shader_set_float(&ibls->prefilter_shader, "u_roughness", roughness);
         for (uint32_t i = 0; i < 6; ++i)
         {
-            shader_set_mat4(&ibl->prefilter_shader, "u_view", captureViews[i]);
+            shader_set_mat4(&ibls->prefilter_shader, "u_view", captureViews[i]);
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, ibl->prefilter_map, mip);
 
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -539,23 +542,29 @@ static inline void ibl_init(Renderer *renderer, const char *hdr_name)
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    // brdf LUT
+    glViewport(0, 0, renderer->viewportSize[0], renderer->viewportSize[1]);
+}
+
+void brdf_init(Renderer * renderer)
+{
+    brdf_t *brdf = &renderer->brdf;
+        // brdf LUT
 #define LUT_RES 512
-    glGenTextures(1, &ibl->brdf_LUT);
-    glBindTexture(GL_TEXTURE_2D, ibl->brdf_LUT);
+    glGenTextures(1, &brdf->brdf_LUT);
+    glBindTexture(GL_TEXTURE_2D, brdf->brdf_LUT);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, LUT_RES, LUT_RES, 0, GL_RG, GL_FLOAT, 0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, ibl->capture_fbo);
-    glBindRenderbuffer(GL_RENDERBUFFER, ibl->capture_rbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, renderer->ibl_fbo);
+    glBindRenderbuffer(GL_RENDERBUFFER, renderer->ibl_rbo);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, LUT_RES, LUT_RES);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ibl->brdf_LUT, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, brdf->brdf_LUT, 0);
 
     glViewport(0, 0, LUT_RES, LUT_RES);
-    shader_use(&ibl->brdf_shader);
+    shader_use(&brdf->brdf_shader);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glBindVertexArray(renderer->quad_VAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
