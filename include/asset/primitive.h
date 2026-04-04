@@ -12,6 +12,9 @@ typedef struct MaterialPBR
     GLuint metallic_roughness;
 
     vec4 albedo_factor;
+    vec2 albedo_scale;
+    bool has_albedo_texcoord;
+
     float metallic_factor;
     float roughness_factor;
 } MaterialPBR;

@@ -77,11 +77,13 @@ void renderer_init(Renderer* renderer, int viewportX,
     
     ibl_t *ibl = &renderer->ibl;
     // skybox shaders
-    shader_init(&ibl->hdr_equirec, "shaders/hdr_equirec.vert", "shaders/hdr_equirec.frag");
+    shader_init(&ibl->hdr_equirec, "shaders/hdr_equirec.vert", "shaders/hdr_equirec.frag");// hdr_equirrec is the cubemap shader
     shader_init(&ibl->hdr_bg, "shaders/hdr_bg.vert", "shaders/hdr_bg.frag");
     shader_use(&ibl->hdr_bg);
     shader_set_int(&ibl->hdr_bg, "u_environmentMap", 0); // tell ogl skybox tex is sent at slot 0
     shader_init(&ibl->irradiance_shader, "shaders/hdr_equirec.vert", "shaders/hdr_irr.frag");
+    shader_init(&ibl->prefilter_shader, "shaders/hdr_equirec.vert", "shaders/hdr_prefilter.frag");
+    shader_init(&ibl->brdf_shader, "shaders/hdr_brdf.vert", "shaders/hdr_brdf.frag");
 
     // init fbos
     gbuffer_setup(renderer, viewportX, viewportY);
@@ -106,7 +108,7 @@ void renderer_init(Renderer* renderer, int viewportX,
     rs->vignette_strength = DEFAULT_VIGNETTE_STRENGTH;
     rs->CA_enabled = DEFAULT_CA_STATE;
     rs->CA_strength = DEFAULT_CA_STRENGTH;
-    rs->bloom_enabled = true;
+    rs->bloom_enabled = false;
     rs->bloom_threshold = 0.2f;
     rs->bloom_strength = 1.0f;
     rs->bloom_blur_passes = 5;
@@ -301,6 +303,14 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     glActiveTexture(GL_TEXTURE7);
     shader_set_int(&renderer->gbuffer.light_shader, "u_irradiance_map", 7);
     glBindTexture(GL_TEXTURE_CUBE_MAP, ibl->irradianceMap);
+    // send prefiltered map
+    glActiveTexture(GL_TEXTURE8);
+    shader_set_int(&renderer->gbuffer.light_shader, "u_prefilter_map", 8);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, ibl->prefilter_map);
+    // send brdf lut
+    glActiveTexture(GL_TEXTURE9);
+    shader_set_int(&renderer->gbuffer.light_shader, "u_brdfLUT", 9);
+    glBindTexture(GL_TEXTURE_2D, ibl->brdf_LUT);
 
     // render light pass to a quad
     glBindVertexArray(renderer->quad_VAO);
@@ -582,6 +592,8 @@ static inline void renderer_model_draw(const Model* model, Renderer* renderer, m
             {
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, current_primitive->material.pbr.albedo);
+                shader_set_vec2(shader, "u_albedo_scale", current_primitive->material.pbr.albedo_scale);
+                shader_set_bool(shader, "u_has_albedo_texcoord", current_primitive->material.pbr.has_albedo_texcoord);
                 has_albedo = true;
             }
             if(current_primitive->material.pbr.metallic_roughness)

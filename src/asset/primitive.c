@@ -215,9 +215,15 @@ static inline void material_load(Material* mat, cgltf_primitive* src, const char
     // load core PBR
     if (m->has_pbr_metallic_roughness)
     {
+        // albedo
         mat->pbr.albedo = load_texture_view(&m->pbr_metallic_roughness.base_color_texture, base_path, cache);
-        mat->pbr.metallic_roughness = load_texture_view(&m->pbr_metallic_roughness.metallic_roughness_texture, base_path, cache);
+        if(m->pbr_metallic_roughness.base_color_texture.texcoord)
+            mat->pbr.has_albedo_texcoord = true;
+        memcpy(mat->pbr.albedo_scale, m->pbr_metallic_roughness.base_color_texture.transform.scale, sizeof(vec2));
         memcpy(mat->pbr.albedo_factor, m->pbr_metallic_roughness.base_color_factor, sizeof(vec4));
+
+        // metallic roughness
+        mat->pbr.metallic_roughness = load_texture_view(&m->pbr_metallic_roughness.metallic_roughness_texture, base_path, cache);
         mat->pbr.metallic_factor = m->pbr_metallic_roughness.metallic_factor;
         mat->pbr.roughness_factor = m->pbr_metallic_roughness.roughness_factor;
     }

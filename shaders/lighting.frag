@@ -96,7 +96,10 @@ vec3 get_directional_light(directional_light light, vec3 N, vec3 V, vec3 albedo,
 
 float dirLight_shadow(vec4 lightSpaceVec, vec3 N, vec3 lightDir);
 
+// ibl uniforms
 uniform samplerCube u_irradiance_map;
+uniform samplerCube u_prefilter_map;
+uniform sampler2D u_brdfLUT;
 
 void main()
 {
@@ -114,11 +117,18 @@ void main()
 
     vec3 albedo = texture(g_albedo, v_uv).rgb;
 
-    vec4 ormt = texture(g_orm, v_uv);
-    //float occlusion = ormt.r;
-    float occlusion = u_ssao_enabled ? texture(ssao, v_uv).r : 1.0;
-    float roughness = ormt.g;
-    float metalness = ormt.b;
+    vec4 orm = texture(g_orm, v_uv);
+    
+    float occlusion = 1.0;
+    if(u_ssao_enabled)
+    {
+        if(orm.a == 0.0)
+            occlusion = texture(ssao, v_uv).r;
+        else
+            occlusion = orm.r;
+    }
+    float roughness = orm.g;
+    float metalness = orm.b;
 
     vec3 emissive = texture(g_emissive, v_uv).rgb;
 
@@ -150,11 +160,22 @@ void main()
 
 
     vec3 F0 = mix(vec3(0.04), albedo, metalness);
-    vec3 kS = F_Schlick_Roughness(max(norm_dot_view, 0.0), F0, roughness);
+    vec3 F = F_Schlick_Roughness(max(norm_dot_view, 0.0), F0, roughness);
+    
+    vec3 kS = F;
     vec3 kD = 1.0 - kS;
+    kD *= 1.0 - metalness;
+
     vec3 irradiance = texture(u_irradiance_map, normal).rgb;
     vec3 diffuse = irradiance * albedo;
-    vec3 ambient = vec3(0.25) * (kD * diffuse) * occlusion;
+
+    vec3 R = reflect(-view_direction, normal);
+    const float MAX_REFLECTION_LOD = 4.0; // number of mipmaps minus one
+    vec3 prefiltered_color = textureLod(u_prefilter_map, R, roughness * MAX_REFLECTION_LOD).rgb;
+    vec2 env_BRDF  = texture(u_brdfLUT, vec2(max(dot(normal, view_direction), 0.0), roughness)).rg;
+    vec3 specular = prefiltered_color * (F * env_BRDF.x + env_BRDF.y);
+
+    vec3 ambient = vec3(0.5) * (kD * diffuse + specular) * occlusion;
     //vec3 ambient = vec3(0.05) * albedo * occlusion;
 
     total_light += ambient;

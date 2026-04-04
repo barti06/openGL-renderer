@@ -125,9 +125,13 @@ typedef struct
     uint32_t capture_fbo, capture_rbo;
     uint32_t env_cubemap;
     uint32_t irradianceMap;
+    uint32_t prefilter_map;
+    uint32_t brdf_LUT;
     Shader hdr_equirec;
     Shader hdr_bg;
     Shader irradiance_shader;
+    Shader prefilter_shader;
+    Shader brdf_shader;
 } ibl_t;
 
 typedef struct World World;

@@ -36,6 +36,7 @@ World* world_create(void)
     glm_vec3_dup(((vec3){-0.60f, -0.75f, -0.35f}), world->dirlight_dir);
     world->enable_directional_light = true;
     world->update_shadow = true;
+    world->dirlight_inten = 5.0f;
 
     world->entities_count = 0;
     return world;
