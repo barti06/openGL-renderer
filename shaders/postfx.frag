@@ -24,7 +24,7 @@ uniform float u_vignette_strength = 2.0;
 uniform bool u_chromatic_aberration_enabled = false;
 uniform float u_chromatic_aberration_strength = 2.0;
 
-uniform bool u_bloom_enabled = true;
+uniform bool u_bloom_enabled;
 uniform float u_bloom_strength = 1.0;
 
 // tone mapping functions

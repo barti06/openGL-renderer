@@ -36,7 +36,7 @@ World* world_create(void)
     glm_vec3_dup(((vec3){-0.60f, -0.75f, -0.35f}), world->dirlight_dir);
     world->enable_directional_light = true;
     world->update_shadow = true;
-    world->dirlight_inten = 5.0f;
+    world->dirlight_inten = 2.0f;
 
     world->entities_count = 0;
     return world;
@@ -108,13 +108,14 @@ static struct
 
 void world_ui(World* world)
 {
-    igBegin("World", NULL, 0);
+    igBegin("World Info", NULL, 0);
     igText("Position:\n X=%.2f, Y=%.2f, Z=%.2f", world->camera.position[0], world->camera.position[2], world->camera.position[2]);
     igText("Facing:\n X=%.2f, Y=%.2f, Z=%.2f", world->camera.front[0], world->camera.front[1], world->camera.front[2]);
     igText("Entities: %u / %u", world->entities_count, MAX_ENTITIES);
     igText("Models: %u / %u", world->model_count, MAX_MODELS);
-    igSeparator();
+    igEnd();
 
+    igBegin("World Settings", NULL, 0);
     igCheckbox("Enable directional lighting", &world->enable_directional_light);
     if(world->enable_directional_light)
     {

@@ -10,6 +10,10 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release")
 endif()
 
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    add_link_options(-fuse-ld=lld)
+endif()
+
 add_compile_definitions(
     $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
     $<$<AND:$<C_COMPILER_ID:Clang>,$<PLATFORM_ID:Windows>>:_CRT_SECURE_NO_WARNINGS>
@@ -63,13 +67,13 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     
     # release optimizations
     $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>>:
-        -O3 -mavx2 -mfma -ffast-math -funroll-loops -fomit-frame-pointer>
+        -O3 -mavx2 -mfma -ffast-math -funroll-loops -fomit-frame-pointer -Wall -Wextra -Wno-unused-parameter>
     $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,MSVC>>:
         /O2 /fp:fast /GL /arch:AVX2>
 
     # debug 'anti' optimizations
     $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>>:
-        -g -O0 -fno-omit-frame-pointer>
+        -g -O0 -fno-omit-frame-pointer -Wall -Wextra -Wno-unused-parameter>
     $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANG_AND_ID:C,MSVC>>:
         /ZI /Od /RTC1>
 )

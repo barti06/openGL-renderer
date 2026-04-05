@@ -48,12 +48,9 @@ void renderer_init(Renderer* renderer, int viewportX,
     renderer->viewportSize[0] = viewportX;
     renderer->viewportSize[1] = viewportY;
 
-    // init deferred and forward shaders
-	shader_init(&renderer->gbuffer.deferred_shader, "shaders/geometry.vert", "shaders/deferred.frag");
-    shader_init(&renderer->shadowMap_shader, "shaders/geometry_shadowMap.vert", "shaders/shadowMap.frag");
+    renderer_init_shaders(renderer);
 
     renderer->active_shader = &renderer->gbuffer.deferred_shader;
-
 
     // generate main quad vao and vbo
     glGenVertexArrays(1, &renderer->quad_VAO);
@@ -66,33 +63,13 @@ void renderer_init(Renderer* renderer, int viewportX,
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
 
-    // init shaders
-    shader_init(&renderer->gbuffer.light_shader, "shaders/quad.vert", "shaders/lighting.frag");
-    shader_init(&renderer->fx.fx_shader, "shaders/quad.vert", "shaders/postfx.frag");
-    // bloom shaders
-    shader_init(&renderer->bloom.bloom_blur_shader, "shaders/quad.vert", "shaders/bloom_blur.frag");
-    //ssao shaders
-    shader_init(&renderer->ssao.ssao_shader, "shaders/quad.vert", "shaders/hbao.frag");
-    shader_init(&renderer->ssao.ssao_blur_shader, "shaders/quad.vert", "shaders/ssao_blur.frag");
-    
-    iblShared_t *ibls = &renderer->ibl_shared;
-    // skybox shaders
-    shader_init(&ibls->hdr_equirec, "shaders/hdr_equirec.vert", "shaders/hdr_equirec.frag");// hdr_equirrec is the cubemap shader
-    shader_init(&ibls->hdr_bg, "shaders/hdr_bg.vert", "shaders/hdr_bg.frag");
-    shader_use(&ibls->hdr_bg);
-    shader_set_int(&ibls->hdr_bg, "u_environmentMap", 0); // tell ogl skybox tex is sent at slot 0
-    shader_init(&ibls->irradiance_shader, "shaders/hdr_equirec.vert", "shaders/hdr_irr.frag");
-    shader_init(&ibls->prefilter_shader, "shaders/hdr_equirec.vert", "shaders/hdr_prefilter.frag");
-    shader_init(&ibls->brdf_shader, "shaders/hdr_brdf.vert", "shaders/hdr_brdf.frag");
-
     // init fbos
     gbuffer_setup(renderer, viewportX, viewportY);
     postFX_setup(renderer, viewportX, viewportY);
     ssao_setup(renderer, viewportX, viewportY);
 
+    // send post processing texture uniforms
     Shader *fs = &renderer->fx.fx_shader;
-
-    // init post processing shader
     shader_use(fs);
     shader_set_int(fs, "fx_scene", 0);
     shader_set_int(fs, "fx_depth", 1);
@@ -108,11 +85,12 @@ void renderer_init(Renderer* renderer, int viewportX,
     rs->vignette_strength = DEFAULT_VIGNETTE_STRENGTH;
     rs->CA_enabled = DEFAULT_CA_STATE;
     rs->CA_strength = DEFAULT_CA_STRENGTH;
-    rs->bloom_enabled = false;
+    rs->bloom_enabled = true;
     rs->bloom_threshold = 0.2f;
-    rs->bloom_strength = 1.0f;
-    rs->bloom_blur_passes = 5;
+    rs->bloom_filter_radius = 0.005f;
+    rs->bloom_strength = 0.5f;
     rs->ibl_selected = IBL_SELECTION_CLOUDS;
+    rs->ambient_str = 0.5f;
 
     // for gpu timings
     renderTimers_t *rt = &renderer->timers;
@@ -128,6 +106,8 @@ void renderer_init(Renderer* renderer, int viewportX,
     shadowMap_init(&renderer->shadow);
 
     cube_init(renderer);
+
+    bloom_setup(renderer, viewportX, viewportY);
 
     renderer->active_ibl = &renderer->cloud_ibl;
     ibl_init(renderer, "../../resources/clouds.hdr");
@@ -149,6 +129,7 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
 
         ssao_update(renderer, renderer->viewportSize[0], renderer->viewportSize[1]);
         postFX_update(renderer, renderer->viewportSize[0], renderer->viewportSize[1]);
+        bloom_update(renderer, renderer->viewportSize[0], renderer->viewportSize[1]);
     }
 
     shader_use(renderer->active_shader);
@@ -171,6 +152,8 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
     shader_set_bool(&renderer->gbuffer.light_shader, "u_shadows_enabled", renderer->settings.shadows_enabled);
     shader_set_float(&renderer->gbuffer.light_shader, "u_shadow_bias", renderer->settings.shadows_bias);
     shader_set_float(&renderer->gbuffer.light_shader, "u_shadow_spread", renderer->settings.shadows_spread);
+    shader_set_float(&renderer->gbuffer.light_shader, "u_ambient_str", renderer->settings.ambient_str);
+
     switch(rs->ibl_selected)
     {
         case IBL_SELECTION_CLOUDS:
@@ -365,24 +348,64 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     bloom_t *b = &renderer->bloom;
     if(rs->bloom_enabled)
     {
-        // pingpong blur
-        bool horizontal = true;
-        // first pass reads from bloom_bright then other passes pingpong between bloom_tex
+        glDisable(GL_DEPTH_TEST);
+
+        // downsample pass
+        shader_use(&b->downsample_shader);
+        shader_set_int(&b->downsample_shader, "u_src", 0);
         glActiveTexture(GL_TEXTURE0);
-        shader_use(&b->bloom_blur_shader);
-        shader_set_int(&b->bloom_blur_shader, "u_image", 0);
-        for(int i = 0; i < rs->bloom_blur_passes * 2; i++)
+
+        glBindFramebuffer(GL_FRAMEBUFFER, b->output_fbo);
+        glViewport(0, 0, b->output_w, b->output_h);
+    
+        shader_set_bool(&b->downsample_shader, "u_use_threshold", true);
+        shader_set_float(&b->downsample_shader, "u_threshold", rs->bloom_threshold);
+        shader_set_vec2(&b->downsample_shader, "u_src_texel_size", (vec2){1.0f / renderer->viewportSize[0], 1.0f / renderer->viewportSize[1]});
+    
+        glBindTexture(GL_TEXTURE_2D, fx->fx_scene);
+        glBindVertexArray(renderer->quad_VAO);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        shader_set_bool(&b->downsample_shader, "u_use_threshold", false);
+
+        for(int i = 0; i < BLOOM_MIP_COUNT; i++)
         {
-            glBindFramebuffer(GL_FRAMEBUFFER, b->bloom_fbo[horizontal]);
-            shader_set_bool(&b->bloom_blur_shader, "u_horizontal", horizontal);
-            glBindTexture(GL_TEXTURE_2D, i == 0 ? b->bloom_bright : b->fx_bloom[!horizontal]);
+            int src_w = (i == 0) ? b->output_w : b->mip_w[i-1];
+            int src_h = (i == 0) ? b->output_h : b->mip_h[i-1];
+            GLuint src_tex = (i == 0) ? b->output_tex : b->mip_tex[i-1];
+
+            shader_set_vec2(&b->downsample_shader, "u_src_texel_size", (vec2){1.0f / src_w, 1.0f / src_h});
+        
+            glBindFramebuffer(GL_FRAMEBUFFER, b->mip_fbo[i]);
+            glViewport(0, 0, b->mip_w[i], b->mip_h[i]);
+            glBindTexture(GL_TEXTURE_2D, src_tex);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+
+        // upsample pass
+        shader_use(&b->upsample_shader);
+        shader_set_int(&b->upsample_shader, "u_src", 0);
+        shader_set_float(&b->upsample_shader, "u_filter_radius", rs->bloom_filter_radius);
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE); // additive blend while upsampling
+        glBlendEquation(GL_FUNC_ADD);
+
+        for(int i = BLOOM_MIP_COUNT - 1; i > 0; i--)
+        {
+            glBindFramebuffer(GL_FRAMEBUFFER, b->mip_fbo[i - 1]);
+            glViewport(0, 0, b->mip_w[i - 1], b->mip_h[i - 1]);
+            glBindTexture(GL_TEXTURE_2D, b->output_tex);
             glBindVertexArray(renderer->quad_VAO);
             glDrawArrays(GL_TRIANGLES, 0, 6);
-            horizontal = !horizontal;
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
-    }
 
+        glDisable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); // restore default
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, renderer->viewportSize[0], renderer->viewportSize[1]);
+    }
+    
     // postFX pass
     glClear(GL_COLOR_BUFFER_BIT);
     glDisable(GL_DEPTH_TEST);
@@ -392,7 +415,7 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, fx->fx_depth);
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, b->fx_bloom[0]);
+    glBindTexture(GL_TEXTURE_2D, rs->bloom_enabled ? b->mip_tex[0] : 0);
     glBindVertexArray(renderer->quad_VAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glEnable(GL_DEPTH_TEST);
@@ -522,16 +545,17 @@ const char *IBL_options [] = {
 
 void renderer_ui(Renderer* renderer)
 {
-    igBegin("Renderer", NULL, 0);
+    igBegin("Renderer Info", NULL, 0);
     igText("FPS: %.3f", renderer->timers.stats_fps);
-    igText("Geometry pass: %.3f ms", renderer->timers.stats_geometry_ms);
-    igText("Lighting pass: %.3f ms", renderer->timers.stats_light_ms);
-    igText("SSAO pass: %.3f ms", renderer->timers.stats_ssao_ms);
-    igText("SSAO blur pass: %.3f ms", renderer->timers.stats_ssao_blur_ms);
-    igText("Post-Processing pass: %.3f ms", renderer->timers.stats_fx_ms);
-    igText("Shadows pass: %.3f", renderer->timers.stats_shadows_ms);
-    igSeparator();
+    igText("Geometry Pass: %.3f ms", renderer->timers.stats_geometry_ms);
+    igText("Lighting Pass: %.3f ms", renderer->timers.stats_light_ms);
+    igText("SSAO Pass: %.3f ms", renderer->timers.stats_ssao_ms);
+    igText("SSAO Blur Pass: %.3f ms", renderer->timers.stats_ssao_blur_ms);
+    igText("PostFX Pass: %.3f ms", renderer->timers.stats_fx_ms);
+    igText("Shadows Pass: %.3f", renderer->timers.stats_shadows_ms);
+    igEnd();
 
+    igBegin("Renderer Settings", NULL, 0);
     renderSettings_t *rs = &renderer->settings;
 
     bool ibl_open = igCollapsingHeader_TreeNodeFlags("IBL", 0);
@@ -541,15 +565,15 @@ void renderer_ui(Renderer* renderer)
         igSeparator();
     }
 
-    bool pipeline_open = igCollapsingHeader_TreeNodeFlags("Debug view", 0);
+    bool pipeline_open = igCollapsingHeader_TreeNodeFlags("Debug View", 0);
     if(pipeline_open)
     {
-        igCombo_Str_arr("GBuffer view", &rs->gbuffer_view, gbuffer_options, GBUFFER_MAX, -1);
+        igCombo_Str_arr("", &rs->gbuffer_view, gbuffer_options, GBUFFER_MAX, -1);
         igSeparator();
     }
 
-    bool graphics_open = igCollapsingHeader_TreeNodeFlags("Graphics settings", 0);
-    if(graphics_open)
+    bool postfx_open = igCollapsingHeader_TreeNodeFlags("PostFX", 0);
+    if(postfx_open)
     {
         igCombo_Str_arr("Tone mapper", &rs->tonemap, tonemap_options, TONEMAP_MAX, -1);
         igSliderFloat("Gamma", &rs->gamma, 0.0f, 3.0f, "%.1f", 0);
@@ -564,10 +588,16 @@ void renderer_ui(Renderer* renderer)
         igCheckbox("Bloom", &rs->bloom_enabled);
         if(rs->bloom_enabled)
         {
-            igSliderFloat("Bloom strength", &rs->bloom_strength, 0.0f, 20.0f, "%.1f", 0);
-            igSliderFloat("Bloom threshold", &rs->bloom_threshold, 0.0f, 1.0f, "%.2f", 0);
-            igSliderInt("Bloom blur passes", &rs->bloom_blur_passes, 0, 100, "%d", 0);
+            igSliderFloat("Bloom strength", &rs->bloom_strength, 0.0f, 5.0f, "%.4f", 0);
+            igSliderFloat("Bloom threshold", &rs->bloom_threshold, 0.0f, 1.0f, "%.4f", 0);
+            igSliderFloat("Bloom filter radius", &rs->bloom_filter_radius, 0.0f, 0.5f, "%.4f", 0);            
         }
+    }
+
+    bool ambient_open = igCollapsingHeader_TreeNodeFlags("Ambient Settings", 0);
+    if(ambient_open)
+    {
+        igSliderFloat("Ambient Strength", &rs->ambient_str, 0.0f, 1.0f, "%.2f", 0);
         igCheckbox("SSAO", &rs->ssao_enabled);
         if(rs->ssao_enabled)
         {
@@ -577,6 +607,11 @@ void renderer_ui(Renderer* renderer)
             igSliderInt("SSAO directions", &rs->hbao_directions, 0, 50, "%d", 0);
             igSliderInt("SSAO steps", &rs->hbao_steps, 0, 50, "%d", 0);
         }
+    }
+
+    bool shadows_open = igCollapsingHeader_TreeNodeFlags("Shadows Settings", 0);
+    if(shadows_open)
+    {
         igCheckbox("Shadows", &rs->shadows_enabled);
         if(rs->shadows_enabled)
         {

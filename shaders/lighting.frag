@@ -75,6 +75,8 @@ uniform bool u_shadows_enabled;
 uniform float u_shadow_bias;
 uniform float u_shadow_spread;
 
+uniform float u_ambient_str;
+
 // pbr utilities
 float D_GGX(float NdotH, float roughness);
 
@@ -175,7 +177,7 @@ void main()
     vec2 env_BRDF  = texture(u_brdfLUT, vec2(max(dot(normal, view_direction), 0.0), roughness)).rg;
     vec3 specular = prefiltered_color * (F * env_BRDF.x + env_BRDF.y);
 
-    vec3 ambient = vec3(0.5) * (kD * diffuse + specular) * occlusion;
+    vec3 ambient = vec3(u_ambient_str) * (kD * diffuse + specular) * occlusion;
     //vec3 ambient = vec3(0.05) * albedo * occlusion;
 
     total_light += ambient;

@@ -82,9 +82,9 @@ typedef struct
     bool CA_enabled;
     float CA_strength;
     // bloom settings
-    int bloom_blur_passes;
     float bloom_threshold;
     float bloom_strength;
+    float bloom_filter_radius;
     bool bloom_enabled;
     // ssao settings
     float ssao_radius;
@@ -98,8 +98,10 @@ typedef struct
     float shadows_bias;
     float shadows_spread;
     iblSelection_t ibl_selected;
-} renderSettings_t;
 
+    float ambient_str;
+} renderSettings_t;
+/*
 typedef struct 
 {
     // bloom
@@ -107,7 +109,8 @@ typedef struct
     GLuint fx_bloom[2]; // bloom tex
     GLuint bloom_bright; // scene brightness
     Shader bloom_blur_shader;
-} bloom_t;
+} bloom_t;*/
+
 
 typedef struct
 {
@@ -119,6 +122,24 @@ typedef struct
     Shader ssao_shader;
     Shader ssao_blur_shader;
 } ssao_t;
+
+
+#define BLOOM_MIP_COUNT 6
+
+typedef struct
+{
+    GLuint mip_fbo[BLOOM_MIP_COUNT];
+    GLuint mip_tex[BLOOM_MIP_COUNT];
+    int mip_w[BLOOM_MIP_COUNT];
+    int mip_h[BLOOM_MIP_COUNT];
+
+    GLuint output_tex;
+    GLuint output_fbo;
+    GLuint output_w, output_h;
+
+    Shader downsample_shader;
+    Shader upsample_shader;
+} bloom_t;
 
 typedef struct
 {

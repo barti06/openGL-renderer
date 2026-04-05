@@ -3,6 +3,32 @@
 #include <math.h>
 #include <log.h>
 
+static inline void renderer_init_shaders(Renderer *r)
+{
+    // init deferred and forward shaders
+	shader_init(&r->gbuffer.deferred_shader, "shaders/geometry.vert", "shaders/deferred.frag");
+    shader_init(&r->shadowMap_shader, "shaders/geometry_shadowMap.vert", "shaders/shadowMap.frag");
+    // init light and post processing shaders
+    shader_init(&r->gbuffer.light_shader, "shaders/quad.vert", "shaders/lighting.frag");
+    shader_init(&r->fx.fx_shader, "shaders/quad.vert", "shaders/postfx.frag");
+    //ssao shaders
+    shader_init(&r->ssao.ssao_shader, "shaders/quad.vert", "shaders/hbao.frag");
+    shader_init(&r->ssao.ssao_blur_shader, "shaders/quad.vert", "shaders/ssao_blur.frag");
+    
+    iblShared_t *ibls = &r->ibl_shared;
+    // skybox shaders
+    shader_init(&ibls->hdr_equirec, "shaders/hdr_equirec.vert", "shaders/hdr_equirec.frag");// hdr_equirrec is the cubemap shader
+    shader_init(&ibls->hdr_bg, "shaders/hdr_bg.vert", "shaders/hdr_bg.frag");
+    shader_use(&ibls->hdr_bg);
+    shader_set_int(&ibls->hdr_bg, "u_environmentMap", 0); // tell ogl skybox tex is sent at slot 0
+    shader_init(&ibls->irradiance_shader, "shaders/hdr_equirec.vert", "shaders/hdr_irr.frag");
+    shader_init(&ibls->prefilter_shader, "shaders/hdr_equirec.vert", "shaders/hdr_prefilter.frag");
+    shader_init(&ibls->brdf_shader, "shaders/hdr_brdf.vert", "shaders/hdr_brdf.frag");
+    bloom_t *b = &r->bloom;
+    shader_init(&b->downsample_shader, "shaders/quad.vert", "shaders/bloom_downsample.frag");
+    shader_init(&b->upsample_shader, "shaders/quad.vert", "shaders/bloom_upsample.frag");
+}
+
 static inline void gbuffer_setup(Renderer* renderer, int w, int h)
 {
     glGenFramebuffers(1, &renderer->gbuffer.gBuffer_fbo);
@@ -115,41 +141,6 @@ static inline void postFX_setup(Renderer* renderer, int w, int h)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, fx->fx_depth, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
-
-    bloom_t *b = &renderer->bloom;
-
-    // bloom brightness extractor
-    glGenTextures(1, &b->bloom_bright);
-    glBindTexture(GL_TEXTURE_2D, b->bloom_bright);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, b->bloom_bright, 0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    GLuint attachments[] = {
-        GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1
-    };
-    glDrawBuffers(sizeof(attachments) / sizeof(GLuint), attachments);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    // ping-pong blur fbos
-    glGenFramebuffers(2, b->bloom_fbo);
-    glGenTextures(2, b->fx_bloom);
-    for(int i = 0; i < 2; i++)
-    {
-        glBindFramebuffer(GL_FRAMEBUFFER, b->bloom_fbo[i]);
-        glBindTexture(GL_TEXTURE_2D, b->fx_bloom[i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, b->fx_bloom[i], 0);
-        glBindTexture(GL_TEXTURE_2D, 0);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    }
 }
 
 static inline void gbuffer_update(Renderer* renderer, int w, int h)
@@ -197,23 +188,6 @@ static inline void postFX_update(Renderer* renderer, int w, int h)
     glBindTexture(GL_TEXTURE_2D, fx->fx_depth);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, w, h, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
     glBindTexture(GL_TEXTURE_2D, 0);
-
-    bloom_t *b = &renderer->bloom;
-    // bloom brightness update
-    glBindTexture(GL_TEXTURE_2D, b->bloom_bright);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    // bloom blur update
-    for(int i = 0; i < 2; i++)
-    {
-        glBindFramebuffer(GL_FRAMEBUFFER, b->bloom_fbo[i]);
-        glBindTexture(GL_TEXTURE_2D, b->fx_bloom[i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL);
-        glBindTexture(GL_TEXTURE_2D, 0);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    }
 }
 
 static inline void ssao_setup(Renderer* renderer, int w, int h)
@@ -303,6 +277,84 @@ static inline void ssao_update(Renderer* renderer, int w, int h)
     float noise_scale_x = renderer->viewportSize[0] / 4.0f;
     float noise_scale_y = renderer->viewportSize[1] / 4.0f;
     shader_set_vec2(&ssao->ssao_shader, "u_noise_scale", (vec2){noise_scale_x, noise_scale_y});
+}
+
+static inline void bloom_setup(Renderer *rnd, int w, int h)
+{
+    bloom_t *b = &rnd->bloom;
+
+    shader_use(&b->downsample_shader);
+    shader_set_int(&b->downsample_shader, "u_src", 0);
+
+    shader_use(&b->upsample_shader);
+    shader_set_int(&b->upsample_shader, "u_src", 0);
+
+    b->output_w = w / 2;
+    b->output_h = h / 2;
+
+    glGenFramebuffers(1, &b->output_fbo);
+    glGenTextures(1, &b->output_tex);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, b->output_fbo);
+    glBindTexture(GL_TEXTURE_2D, b->output_tex);
+    
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R11F_G11F_B10F, b->output_w, b->output_h, 0, GL_RGB, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, b->output_tex, 0);
+
+
+    glGenFramebuffers(BLOOM_MIP_COUNT, b->mip_fbo);
+    glGenTextures(BLOOM_MIP_COUNT, b->mip_tex);
+    
+    int mip_w = b->output_w / 2;
+    int mip_h = b->output_h / 2;
+    for(int i = 0; i < BLOOM_MIP_COUNT; i++)
+    {
+        b->mip_w[i] = mip_w;
+        b->mip_h[i] = mip_h;
+
+        glBindFramebuffer(GL_FRAMEBUFFER, b->mip_fbo[i]);
+        glBindTexture(GL_TEXTURE_2D, b->mip_tex[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R11F_G11F_B10F, mip_w, mip_h, 0, GL_RGB, GL_FLOAT, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, b->mip_tex[i], 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        mip_w = max(1, mip_w / 2);
+        mip_h = max(1, mip_h / 2);
+    }
+
+
+}
+
+static inline void bloom_update(Renderer *rnd, int w, int h)
+{
+    bloom_t *b = &rnd->bloom;
+
+    int mip_w = w / 2;
+    int mip_h = h / 2;
+    for(int i = 0; i < BLOOM_MIP_COUNT; i++)
+    {
+        b->mip_w[i] = mip_w;
+        b->mip_h[i] = mip_h;
+
+        glBindFramebuffer(GL_FRAMEBUFFER, b->mip_fbo[i]);
+        glBindTexture(GL_TEXTURE_2D, b->mip_tex[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R11F_G11F_B10F, mip_w, mip_h, 0, GL_RGB, GL_FLOAT, NULL);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        mip_w = max(1, mip_w / 2);
+        mip_h = max(1, mip_h / 2);
+    }
 }
 
 static inline void cube_init(Renderer *renderer)
