@@ -339,8 +339,15 @@ static inline void bloom_update(Renderer *rnd, int w, int h)
 {
     bloom_t *b = &rnd->bloom;
 
-    int mip_w = w / 2;
-    int mip_h = h / 2;
+    b->output_w = w / 2;
+    b->output_h = h / 2;
+
+    glBindFramebuffer(GL_FRAMEBUFFER, b->output_fbo);
+    glBindTexture(GL_TEXTURE_2D, b->output_tex);
+    
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R11F_G11F_B10F, b->output_w, b->output_h, 0, GL_RGB, GL_FLOAT, NULL);
+    int mip_w = b->output_w / 2;
+    int mip_h = b->output_h / 2;
     for(int i = 0; i < BLOOM_MIP_COUNT; i++)
     {
         b->mip_w[i] = mip_w;

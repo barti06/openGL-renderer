@@ -85,6 +85,7 @@ typedef struct
     float bloom_threshold;
     float bloom_strength;
     float bloom_filter_radius;
+    bool bloom_emissive_only;
     bool bloom_enabled;
     // ssao settings
     float ssao_radius;

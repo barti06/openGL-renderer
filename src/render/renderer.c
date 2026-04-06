@@ -89,6 +89,7 @@ void renderer_init(Renderer* renderer, int viewportX,
     rs->bloom_threshold = 0.2f;
     rs->bloom_filter_radius = 0.005f;
     rs->bloom_strength = 0.5f;
+    rs->bloom_emissive_only = false;
     rs->ibl_selected = IBL_SELECTION_CLOUDS;
     rs->ambient_str = 0.5f;
 
@@ -149,10 +150,10 @@ void renderer_updates(World* world, Renderer* renderer, int windowX, int windowY
     shader_set_int(&renderer->gbuffer.light_shader, "u_gbuffer_view", rs->gbuffer_view);
     shader_set_float(&renderer->gbuffer.light_shader, "u_bloom_threshold", rs->bloom_threshold);
     shader_set_bool(&renderer->gbuffer.light_shader, "u_ssao_enabled", rs->ssao_enabled);
-    shader_set_bool(&renderer->gbuffer.light_shader, "u_shadows_enabled", renderer->settings.shadows_enabled);
-    shader_set_float(&renderer->gbuffer.light_shader, "u_shadow_bias", renderer->settings.shadows_bias);
-    shader_set_float(&renderer->gbuffer.light_shader, "u_shadow_spread", renderer->settings.shadows_spread);
-    shader_set_float(&renderer->gbuffer.light_shader, "u_ambient_str", renderer->settings.ambient_str);
+    shader_set_bool(&renderer->gbuffer.light_shader, "u_shadows_enabled", rs->shadows_enabled);
+    shader_set_float(&renderer->gbuffer.light_shader, "u_shadow_bias", rs->shadows_bias);
+    shader_set_float(&renderer->gbuffer.light_shader, "u_shadow_spread", rs->shadows_spread);
+    shader_set_float(&renderer->gbuffer.light_shader, "u_ambient_str", rs->ambient_str);
 
     switch(rs->ibl_selected)
     {
@@ -362,7 +363,7 @@ void renderer_draw_world(World* world, Renderer* renderer, double delta_time)
         shader_set_float(&b->downsample_shader, "u_threshold", rs->bloom_threshold);
         shader_set_vec2(&b->downsample_shader, "u_src_texel_size", (vec2){1.0f / renderer->viewportSize[0], 1.0f / renderer->viewportSize[1]});
     
-        glBindTexture(GL_TEXTURE_2D, fx->fx_scene);
+        glBindTexture(GL_TEXTURE_2D, rs->bloom_emissive_only? renderer->gbuffer.g_emissive : fx->fx_scene);
         glBindVertexArray(renderer->quad_VAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
@@ -588,9 +589,10 @@ void renderer_ui(Renderer* renderer)
         igCheckbox("Bloom", &rs->bloom_enabled);
         if(rs->bloom_enabled)
         {
-            igSliderFloat("Bloom strength", &rs->bloom_strength, 0.0f, 5.0f, "%.4f", 0);
-            igSliderFloat("Bloom threshold", &rs->bloom_threshold, 0.0f, 1.0f, "%.4f", 0);
-            igSliderFloat("Bloom filter radius", &rs->bloom_filter_radius, 0.0f, 0.5f, "%.4f", 0);            
+            igCheckbox("Bloom Emissive Only", &rs->bloom_emissive_only);
+            igSliderFloat("Bloom Strength", &rs->bloom_strength, 0.0f, 5.0f, "%.4f", 0);
+            igSliderFloat("Bloom Threshold", &rs->bloom_threshold, 0.0f, 1.0f, "%.4f", 0);
+            igSliderFloat("Bloom Filter Radius", &rs->bloom_filter_radius, 0.0f, 0.5f, "%.4f", 0);          
         }
     }
 
